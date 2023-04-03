@@ -1,0 +1,70 @@
+python run.py train mbert --config-file "/home/egil/gits/litbank4wl-coref/msi_train01_cpu.toml"
+
+bert_model = "bert-base-multilingual-cased"
+a_scoring_batch_size = 4
+bert_finetune = false
+max_span_len = 32
+rough_k = 20
+Epoch 20: nwbokmaal_spbm~20111209-404993 c_loss: 0.39575 s_loss: inf: 100% 36/36 [02:35<00:00,  4.32s/docs]             
+dev: | WL:  loss: 0.31731, f1: 0.36310, p: 0.73523, r: 0.24108 | SL:  sa: 0.93794, f1: 0.34405, p: 0.71334, r: 0.22670: 100% 36/36 [01:03<00:00,  1.75s/docs]
+---
+python run.py train mbert --config-file "/home/egil/gits/litbank4wl-coref/msi_train02_cpu.toml"
+bert_model = "bert-base-multilingual-cased"
+a_scoring_batch_size = 16
+bert_finetune = false
+max_span_len = 64
+rough_k = 20
+
+
+Epoch 20: nwbokmaal_spbm~20111209-404993 c_loss: 0.36652 s_loss: inf: 100% 36/36 [01:57<00:00,  3.27s/docs]             
+dev: | WL:  loss: 0.32557, f1: 0.35596, p: 0.76358, r: 0.23208 | SL:  sa: 0.93504, f1: 0.33224, p: 0.72643, r: 0.21537: 100% 36/36 [01:01<00:00,  1.71s/docs]
+
+-----
+python run.py train xlmr --config-file "/home/egil/gits/litbank4wl-coref/msi_train03_cpu.toml"
+[xlmr]
+bert_model = "xlm-roberta-base"
+bert_finetune = false
+Epoch 20: nwbokmaal_spbm~20111209-404993 c_loss: 0.37605 s_loss: inf: 100% 36/36 [03:03<00:00,  5.09s/docs]             
+dev: | WL:  loss: 0.31747, f1: 0.03620, p: 0.68301, r: 0.01859 | SL:  sa: 0.88462, f1: 0.03872, p: 0.68836, r: 0.01992: 100% 36/36 [01:17<00:00,  2.16s/docs]
+
+-----
+(base) bash-4.4$ python run.py train mbert --config-file ../fox01.toml
+train_data = "wl-ncc/bokmaal/bokmaal_train_head.jsonl"
+dev_data = "wl-ncc/bokmaal/bokmaal_development_head.jsonl"
+test_data = "wl-ncc/bokmaal/bokmaal_test_head.jsonl"
+[mbert]
+bert_model = "bert-base-multilingual-cased"
+dev: | WL:  loss: 0.16744, f1: 0.36963, p: 0.54962, r: 0.27845 | SL:  sa: 0.94836, f1: 0.34704, p: 0.53517, r: 0.25678: 100% 30/30 [00:01<00:00, 22.20docs/s]
+----
+fox02.toml xlmr:
+# Train, dev and test jsonlines
+train_data = "wl-ncc/bokmaal/bokmaal_train_head.jsonl"
+dev_data = "wl-ncc/bokmaal/bokmaal_development_head.jsonl"
+test_data = "wl-ncc/bokmaal/bokmaal_test_head.jsonl"
+
+# The device where everything is to be placed. "cuda:N"/"cpu" are supported.
+device = "cuda:0"
+dev: | WL:  loss: 0.15264, f1: 0.41703, p: 0.43038, r: 0.40449 | SL:  sa: 0.95758, f1: 0.39085, p: 0.41725, r: 0.36760: 100% 30/30 [00:01<00:00, 22.09docs/s]
+
+
+
+-----
+fox03.toml xlmr 28 epochs:
+[xlmr]
+bert_model = "xlm-roberta-base"
+train_epochs = 28
+# Train, dev and test jsonlines
+train_data = "/fp/homes01/u01/ec-egilron/ncc/wl-ncc_heads/wl-ncc_train_head.jsonl"
+dev_data = "/fp/homes01/u01/ec-egilron/ncc/wl-ncc_heads/wl-ncc_development_head.jsonl"
+test_data = "/fp/homes01/u01/ec-egilron/ncc/wl-ncc_heads/wl-ncc_test_head.jsonl"
+ 
+device = "cuda:0"
+ SL:  sa: 0.92852, f1: 0.55783, p: 0.52789, r: 0.59137: 100% 89/89 [00:02<00:00, 31.47docs/s]
+
+----
+fox03_do6:
+[xlmr]
+bert_model = "xlm-roberta-base"
+train_epochs = 28
+dropout_rate = 0.6
+  SL:  sa: 0.93215, f1: 0.50099, p: 0.49918, r: 0.50281: 100% 89/89 [00:02<00:00, 30.65docs/s]
