@@ -1,20 +1,21 @@
+import pyodbc
 from transformers import AutoTokenizer, AutoModel
 import torch
 
 
-def spanbert_encode(text):
+def spanbert_encode(text: str):
     """
     Takes a text and returns its SpanBERT representation.
 
-    :param text: the text to encode with SpanBERT
-    :return: a tensor with the sub-tokens representations [n_sub-words, 1024]
+    :param text: the string to encode with SpanBERT
+    :return: a tensor with the sub-tokens representations [n_sub-words, 768]
     """
 
     # config parameters
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     # TODO change this to large when accessing GPUs
-    tokenizer = AutoTokenizer.from_pretrained('bert-base-cased')
-    model = AutoModel.from_pretrained("SpanBERT/spanbert-base-cased").to(device)
+    tokenizer = AutoTokenizer.from_pretrained('bert-large-cased')
+    model = AutoModel.from_pretrained("SpanBERT/spanbert-large-cased").to(device)
     max_size = 512
     cls_token_id = 101
     sep_token_id = 102
@@ -33,9 +34,9 @@ def spanbert_encode(text):
     split_ids = [tokenized_text['input_ids'][0][i:i + window_size] for i in range(0, size, stride)]
     split_masks = [tokenized_text['attention_mask'][0][i:i + window_size] for i in range(0, size, stride)]
 
-    # remove last chunk if too small
+    # remove last chunk if multiples exist
     last_chunk_size = len(split_ids[len(split_ids) - 1])
-    if len(split_ids) > 1 and last_chunk_size < stride:
+    if len(split_ids) > 1:
         split_ids.pop()
         split_masks.pop()
         last_chunk_size = len(split_ids[len(split_ids) - 1])
