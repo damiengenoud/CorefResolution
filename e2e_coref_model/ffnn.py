@@ -5,7 +5,7 @@ class FFNN(torch.nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.linear1 = torch.nn.Linear(768, 150)
+        self.linear1 = torch.nn.Linear(1024, 150)
         self.activation1 = torch.nn.ReLU()
         self.linear2 = torch.nn.Linear(150, 150)
         self.activation2 = torch.nn.ReLU()

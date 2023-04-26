@@ -1,4 +1,7 @@
-import pyodbc
+"""
+Contains the classical version of the function to encode a string using SpanBERT.
+"""
+
 from transformers import AutoTokenizer, AutoModel
 import torch
 
@@ -8,7 +11,7 @@ def spanbert_encode(text: str):
     Takes a text and returns its SpanBERT representation.
 
     :param text: the string to encode with SpanBERT
-    :return: a tensor with the sub-tokens representations [n_sub-words, 768]
+    :return: a tensor with the sub-tokens representations [n_sub-words, 1024]
     """
 
     # config parameters
