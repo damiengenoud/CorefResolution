@@ -1,11 +1,15 @@
+"""
+Basic FFNN, the same as the ones used in e2e-coref, Lee et al. (2017).
+"""
+
 import torch
 
 
 class FFNN(torch.nn.Module):
 
-    def __init__(self):
+    def __init__(self, in_features: int):
         super().__init__()
-        self.linear1 = torch.nn.Linear(1024, 150)
+        self.linear1 = torch.nn.Linear(in_features, 150)
         self.activation1 = torch.nn.ReLU()
         self.linear2 = torch.nn.Linear(150, 150)
         self.activation2 = torch.nn.ReLU()
