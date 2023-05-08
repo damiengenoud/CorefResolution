@@ -3,43 +3,54 @@ Describes the model that creates the final span representation, based on attenti
 """
 
 import torch
-from torch import Tensor
-
 import ffnn
 
 
 class SpanAttentionEmbedder(torch.nn.Module):
 
-    def __init__(self):
+    def __init__(self, bert_embedding_size: int):
         super().__init__()
-        self.ffnn = ffnn.FFNN(768)
+        self.ffnn = ffnn.FFNN(bert_embedding_size)
 
-    def forward(self, spanbert_out: torch.Tensor) -> tuple[Tensor, Tensor]:
-        max_span_length = 15
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    def forward(self, spanbert_out: torch.Tensor, spans_start: torch.Tensor, spans_end: torch.Tensor, max_span_width: int) -> torch.Tensor:
+        # spanbert_out: [num_tokens]
+        # spans_start: [num_candidates]
+        # spans_end: [num_candidates]
 
-        # compute the tokens attention representation
-        tokens_ffnn_attn = torch.flatten(self.ffnn(spanbert_out))  # alpha
+        num_tokens = spanbert_out.size(0)
 
-        spans_representations = []
-        spans_representations_boundaries = []
+        # These are alpha in paper
+        tokens_attention_score = self.ffnn(spanbert_out)  # [num_tokens, 1]
 
-        # TODO make this more efficient... but how ?
-        for start_index in range(0, tokens_ffnn_attn.size(dim=0)):
-            for end_index in range(start_index, min(start_index + max_span_length, tokens_ffnn_attn.size(dim=0))):
-                # get indices of span
-                indices = torch.arange(start_index, end_index + 1).to(device)
-                # compute the softmax over each token
-                tokens_softmax = torch.softmax(tokens_ffnn_attn[indices], 0)
-                # get the tokens representation of the span
-                subset = spanbert_out[indices]
-                # compute the weighted sum
-                weighted_sum = torch.sum(subset * tokens_softmax[:, None], 0, False)
-                # create the final representation of the span
-                span_rep = torch.cat([spanbert_out[start_index], spanbert_out[end_index], weighted_sum])
-                # add this representation to the list of representations
-                spans_representations.append(span_rep)
-                # add the boundary indices to the list of span boundaries
-                spans_representations_boundaries.append(torch.tensor([start_index, end_index]))
+        spans_embedding_list = []
 
-        return torch.stack(spans_representations), torch.stack(spans_representations_boundaries)
+        # Get the representations of the beginning and ending tokens of each span (Xstart and Xend in paper)
+        spans_start_emb = spanbert_out[spans_start]  # [num_candidates, bert_emb]
+        spans_end_emb = spanbert_out[spans_end]  # [num_candidates, bert_emb]
+
+        spans_embedding_list.append(spans_start_emb)
+        spans_embedding_list.append(spans_end_emb)
+
+        # Get the indices of each possible span (even if the indices are larger than the number of tokens)
+        spans_indices = torch.arange(max_span_width).unsqueeze(0) + spans_start.unsqueeze(1)  # [num_candidates, max_span_width]
+        spans_indices = torch.where(spans_indices < num_tokens, spans_indices, num_tokens - 1)  # [num_candidates, max_span_width]
+
+        spans_tokens_representation = spanbert_out[spans_indices]  # [num_candidates, max_span_width, bert_emb]
+
+        # Get the attention scores of each token in the spans (using masking to remove unwanted tokens)
+        spans_width = spans_end - spans_start + 1  # [num_candidates]
+        spans_tokens_attention = tokens_attention_score[spans_indices]  # [num_candidates, max_span_width, 1]
+        spans_mask = torch.lt(torch.arange(max_span_width).unsqueeze(0), spans_width.unsqueeze(1)).unsqueeze(2)\
+            .float().to(torch.device("cuda:0" if torch.cuda.is_available() else "cpu")) # [num_candidates, max_span_width, 1]
+        spans_tokens_attention += torch.log(spans_mask)  # [num_candidates, max_span_width, 1]
+
+        # These are beta in paper
+        spans_softmax = torch.softmax(spans_tokens_attention, 1)  # [num_candidates, max_span_width, 1]
+        # These are x-hat in paper
+        spans_representation = torch.sum(spans_softmax * spans_tokens_representation, 1)  # [num_candidates, bert_emb]
+
+        spans_embedding_list.append(spans_representation)
+        # These are the g in the paper
+        spans_embedding = torch.cat(spans_embedding_list, 1)  # [num_candidates, span_emb]
+
+        return spans_embedding  # [num_candidates, span_emb]
