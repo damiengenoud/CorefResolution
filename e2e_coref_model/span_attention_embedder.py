@@ -12,19 +12,19 @@ class SpanAttentionEmbedder(torch.nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.ffnn = ffnn.FFNN(1024)
+        self.ffnn = ffnn.FFNN(768)
 
     def forward(self, spanbert_out: torch.Tensor) -> tuple[Tensor, Tensor]:
         max_span_length = 15
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         # compute the tokens attention representation
-        tokens_ffnn_attn = torch.flatten(self.ffnn(spanbert_out))
+        tokens_ffnn_attn = torch.flatten(self.ffnn(spanbert_out))  # alpha
 
         spans_representations = []
         spans_representations_boundaries = []
 
-        # TODO make this more efficient... but how ? And does backpropagation work ?
+        # TODO make this more efficient... but how ?
         for start_index in range(0, tokens_ffnn_attn.size(dim=0)):
             for end_index in range(start_index, min(start_index + max_span_length, tokens_ffnn_attn.size(dim=0))):
                 # get indices of span
