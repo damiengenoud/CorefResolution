@@ -1,7 +1,3 @@
-"""
-Describes the model that creates the final span representation, based on attention mechanism.
-"""
-
 import torch
 import ffnn
 
@@ -10,9 +6,11 @@ class SpanAttentionEmbedder(torch.nn.Module):
 
     def __init__(self, bert_embedding_size: int):
         super().__init__()
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.ffnn = ffnn.FFNN(bert_embedding_size)
 
-    def forward(self, spanbert_out: torch.Tensor, spans_start: torch.Tensor, spans_end: torch.Tensor, max_span_width: int) -> torch.Tensor:
+    def forward(self, spanbert_out: torch.Tensor, spans_start: torch.Tensor, spans_end: torch.Tensor,
+                max_span_width: int) -> torch.Tensor:
         # spanbert_out: [num_tokens]
         # spans_start: [num_candidates]
         # spans_end: [num_candidates]
@@ -32,16 +30,18 @@ class SpanAttentionEmbedder(torch.nn.Module):
         spans_embedding_list.append(spans_end_emb)
 
         # Get the indices of each possible span (even if the indices are larger than the number of tokens)
-        spans_indices = torch.arange(max_span_width).unsqueeze(0) + spans_start.unsqueeze(1)  # [num_candidates, max_span_width]
-        spans_indices = torch.where(spans_indices < num_tokens, spans_indices, num_tokens - 1)  # [num_candidates, max_span_width]
+        spans_indices = torch.arange(max_span_width).unsqueeze(0).to(self.device) + spans_start.unsqueeze(
+            1)  # [num_candidates, max_span_width]
+        spans_indices = torch.where(spans_indices < num_tokens, spans_indices,
+                                    num_tokens - 1)  # [num_candidates, max_span_width]
 
         spans_tokens_representation = spanbert_out[spans_indices]  # [num_candidates, max_span_width, bert_emb]
 
         # Get the attention scores of each token in the spans (using masking to remove unwanted tokens)
         spans_width = spans_end - spans_start + 1  # [num_candidates]
         spans_tokens_attention = tokens_attention_score[spans_indices]  # [num_candidates, max_span_width, 1]
-        spans_mask = torch.lt(torch.arange(max_span_width).unsqueeze(0), spans_width.unsqueeze(1)).unsqueeze(2)\
-            .float().to(torch.device("cuda:0" if torch.cuda.is_available() else "cpu")) # [num_candidates, max_span_width, 1]
+        spans_mask = torch.lt(torch.arange(max_span_width).unsqueeze(0).to(self.device),
+                              spans_width.unsqueeze(1)).unsqueeze(2).float()  # [num_candidates, max_span_width, 1]
         spans_tokens_attention += torch.log(spans_mask)  # [num_candidates, max_span_width, 1]
 
         # These are beta in paper
