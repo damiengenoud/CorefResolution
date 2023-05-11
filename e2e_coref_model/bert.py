@@ -16,7 +16,6 @@ def spanbert_encode(text: str):
 
     # config parameters
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    # TODO change this to large when accessing GPUs
     tokenizer = AutoTokenizer.from_pretrained('bert-large-cased')
     model = AutoModel.from_pretrained("SpanBERT/spanbert-large-cased").to(device)
     max_size = 512
