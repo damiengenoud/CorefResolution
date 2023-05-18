@@ -4,7 +4,8 @@ import torch
 
 def prepare_data(tokenizer, encoder):
     ids_folder_path = 'data'
-    splits = ['train', 'dev', 'test']
+    # splits = ['train', 'dev', 'test']
+    splits = ['test']
     data_dict = {}
     for split in splits:
         with open(ids_folder_path + '/' + split + '.txt', mode='r', encoding='utf-8') as file:
@@ -12,13 +13,9 @@ def prepare_data(tokenizer, encoder):
                 doc_id = line.rstrip()
                 print('Processing: ' + doc_id)
                 tokenized_text, word_ids_to_num_bert_tokens, doc_entities = get_conll_data(doc_id, tokenizer)
-                gpu_encoding = spanbert_encode(tokenized_text, encoder)
-                encoding = gpu_encoding.cpu() #get back to cpu
-                del gpu_encoding
-                torch.cuda.empty_cache()
+                encoding = spanbert_encode(tokenized_text, encoder)
                 data_dict[doc_id] = {'encoding': encoding,
                                      'doc_entities': doc_entities}
-                print('Processed: ' + doc_id)
     return data_dict
 
 
@@ -43,7 +40,6 @@ def get_conll_data(doc_id: str, tokenizer):
                 # Create SpanBERT input dictionary
                 tokens = tokenizer.encode(word, add_special_tokens=False, return_tensors='pt')
                 input_ids = torch.cat([input_ids, tokens[0]])
-
 
                 # Convert to BERT ids to know the number of sub-words of this "word"
                 num_bert_tokens = len(tokens)
@@ -73,7 +69,7 @@ def get_conll_data(doc_id: str, tokenizer):
     tokenized_text = {'input_ids': input_ids,
                       'token_type_ids': torch.tensor([0] * input_ids.size(0)),
                       'attention_mask': torch.tensor([1] * input_ids.size(0))}
-    return tokenized_text, word_ids_to_num_bert_tokens, doc_entities
+    return tokenized_text, torch.tensor(word_ids_to_num_bert_tokens), torch.tensor(doc_entities)
 
 
 def spanbert_encode(tokenized_text, encoder):
@@ -93,7 +89,7 @@ def spanbert_encode(tokenized_text, encoder):
         stride = int((max_size - 2) / 2)
         size = tokenized_text['input_ids'].size(0)
 
-        print("Number of sub-words tokens in input:" + str(len(tokenized_text['input_ids'])))
+        # print("Number of sub-words tokens in input:" + str(len(tokenized_text['input_ids'])))
 
         split_ids = [tokenized_text['input_ids'][i:i + window_size] for i in range(0, size, stride)]
         split_masks = [tokenized_text['attention_mask'][i:i + window_size] for i in range(0, size, stride)]
@@ -146,6 +142,27 @@ def spanbert_encode(tokenized_text, encoder):
 
         output_tensor = torch.cat(non_overlapping_tensors, dim=0)
 
-        print("Size of the encoded text tensor: " + str(output_tensor.size()))
+        # print("Size of the encoded text tensor: " + str(output_tensor.size()))
 
     return output_tensor
+
+
+def get_mentions_labels(
+        true_entities: torch.Tensor,  # [num_true_mentions, 3]
+        predicted_start_indices: torch.Tensor,  # [num_predicted_spans]
+        predicted_end_indices: torch.Tensor  # [num_predicted_spans]
+) -> torch.Tensor:
+    with torch.no_grad():
+        predicted_indices = torch.stack([predicted_start_indices, predicted_end_indices], dim=1)
+        true_indices = true_entities[:, :2]
+
+        # Expands the tensors to be able to use a sort of "contains" function, see :
+        # https://stackoverflow.com/questions/73524338/pytorch-test-each-row-of-the-first-2d-tensor-also-exist-in-the-second-tensor
+        predicted_expand = predicted_indices.unsqueeze(1).expand(-1, true_indices.shape[0], predicted_indices.shape[1])
+        true_expand = true_indices.unsqueeze(0).expand(predicted_indices.shape[0], -1, predicted_indices.shape[1])
+
+        # Similar to a "contains" function
+        labels = (predicted_expand == true_expand).all(-1).any(-1).short()
+        return labels
+
+

@@ -1,14 +1,17 @@
 import os
 from datetime import datetime
+from transformers import AutoTokenizer, AutoModel
 import torch
-import bert
 import mentions_extractor
+import utils
 
 
 class MentionsExtractorRunner:
     def __init__(self):
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.model = mentions_extractor.MentionsExtractor(1024, 0.25, 15).to(self.device)
+        self.encoder = AutoModel.from_pretrained("SpanBERT/spanbert-base-cased").to(self.device)
+        self.tokenizer = AutoTokenizer.from_pretrained('bert-base-cased')
+        self.model = mentions_extractor.MentionsExtractor(768, 0.25, 15).to(self.device)
         self.optim = torch.optim.Adam(
             self.model.parameters(), lr=5e-5
         )
@@ -24,19 +27,20 @@ class MentionsExtractorRunner:
         loss = torch.nn.BCEWithLogitsLoss(reduction='sum')
         return loss(scores, labels)
 
-    def get_validation_loss(self, validation_set_data):
+    def get_validation_loss(self, validation_data_dict):
         total_loss = 0
 
         # Iterate over all validation documents
-        for i, data in enumerate(validation_set_data):
-            # Get encoded text and true mentions
-            encoded_text = data
+        for docId, data in validation_data_dict.items():
+            # Get encoded text and true entities
+            encoded_text = data["encoding"]
+            true_entities = data["doc_entities"]
 
             # Run the mentions extractor
-            top_spans_start_indices, _, top_spans_scores, _ = self.model(encoded_text)
+            top_spans_start_indices, top_spans_end_indices, top_spans_scores, _ = self.model(encoded_text)
 
-            # TODO parse conll and get labels
-            labels = torch.where(top_spans_start_indices % 2 == 0, 1.0, 0.0).to(self.device)
+            # Get the labels of the extracted spans
+            labels = utils.get_mentions_labels(true_entities, top_spans_start_indices, top_spans_end_indices).to(self.device)
 
             # Compute the loss
             loss = self.compute_loss(top_spans_scores, labels)
@@ -48,23 +52,24 @@ class MentionsExtractorRunner:
             total_loss += loss.item()
 
         # Return average loss of the validation
-        return total_loss / len(validation_set_data)
+        return total_loss / len(validation_data_dict)
 
-    def train_one_epoch(self, encoded_training_texts_data):
+    def train_one_epoch(self, training_data_dict):
         total_loss = 0
 
         # Iterate over all training documents
-        for i, data in enumerate(encoded_training_texts_data):
-            # Get encoded text and true mentions
-            encoded_text = data
+        for docId, data in training_data_dict.items():
+            # Get encoded text and true entities
+            encoded_text = data["encoding"]
+            true_entities = data["doc_entities"]
 
             self.optim.zero_grad()
 
             # Run the mentions extractor
-            top_spans_start_indices, _, top_spans_scores, _ = self.model(encoded_text)
+            top_spans_start_indices, top_spans_end_indices, top_spans_scores, _ = self.model(encoded_text)
 
-            # TODO parse conll and get labels
-            labels = torch.where(top_spans_start_indices % 2 == 0, 1.0, 0.0).to(self.device)
+            # Get the labels of the extracted spans
+            labels = utils.get_mentions_labels(true_entities, top_spans_start_indices, top_spans_end_indices).to(self.device)
 
             # Compute the loss
             loss = self.compute_loss(top_spans_scores, labels)
@@ -74,13 +79,13 @@ class MentionsExtractorRunner:
             self.optim.step()
 
             # Print information
-            print('  training document {} loss: {}'.format(i + 1, loss.item()))
+            print('  training document {} loss: {}'.format(docId, loss.item()))
 
             # Add the loss of this document
             total_loss += loss.item()
 
         # Return average loss of the training
-        return total_loss / len(encoded_training_texts_data)
+        return total_loss / len(training_data_dict)
 
     def train(self):
         # Prepare for training
@@ -88,21 +93,19 @@ class MentionsExtractorRunner:
         num_epochs = 100
         best_validation_loss = float('inf')
 
-        # Prepare sample dataset for training
-        text = "I'm a penguin who likes icecream, I find it very good. My mother always said that it is bad for me to eat so much of it. I hope she is not angry about it."
-        encoded_text = bert.spanbert_encode(text)
-        encoded_training_texts_data = [encoded_text]
-        encoded_validation_texts_data = [encoded_text]
+        # Get the data ready
+        with torch.no_grad():
+            data_dict = utils.prepare_data(self.tokenizer, self.encoder)
 
         for epoch in range(num_epochs):
             print('EPOCH {}:'.format(epoch + 1))
 
             # Train the model and get the training loss of the current epoch
-            training_loss = self.train_one_epoch(encoded_training_texts_data)
+            training_loss = self.train_one_epoch(data_dict)
 
             # Compute the loss on the validation set
             with torch.no_grad():
-                validation_loss = self.get_validation_loss(encoded_validation_texts_data)
+                validation_loss = self.get_validation_loss(data_dict)
 
             print('LOSS: train {}, valid {}'.format(training_loss, validation_loss))
 

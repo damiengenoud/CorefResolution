@@ -6,7 +6,7 @@ class MentionsLinker(torch.nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.ffnn = ffnn.FFNN(3 * 3 * 1024)
+        self.ffnn = ffnn.FFNN(3 * 3 * 768)
 
     def forward(self, top_scoring_spans: torch.Tensor, top_scores: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         pairs_scores = []
