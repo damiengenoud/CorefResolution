@@ -2,8 +2,10 @@ import os
 from datetime import datetime
 from transformers import AutoTokenizer, AutoModel
 import torch
+from torch.utils.data import DataLoader
 import mentions_extractor
 import utils
+import custom_dataset
 
 
 class MentionsExtractorRunner:
@@ -16,7 +18,7 @@ class MentionsExtractorRunner:
             self.model.parameters(), lr=5e-5
         )
         self.lr_scheduler = torch.optim.lr_scheduler.StepLR(
-            self.optim, step_size=100, gamma=0.999
+            self.optim, step_size=5, gamma=0.5
         )
 
     @staticmethod
@@ -27,14 +29,14 @@ class MentionsExtractorRunner:
         loss = torch.nn.BCEWithLogitsLoss(reduction='sum')
         return loss(scores, labels)
 
-    def get_validation_loss(self, validation_data_dict):
+    def get_validation_loss(self, validation_dataloader):
         total_loss = 0
 
         # Iterate over all validation documents
-        for docId, data in validation_data_dict.items():
+        for data in validation_dataloader:
             # Get encoded text and true entities
-            encoded_text = data["encoding"]
-            true_entities = data["doc_entities"]
+            encoded_text = data["encoding"].squeeze()
+            true_entities = data["doc_entities"].squeeze()
 
             # Run the mentions extractor
             top_spans_start_indices, top_spans_end_indices, top_spans_scores, _ = self.model(encoded_text)
@@ -46,22 +48,22 @@ class MentionsExtractorRunner:
             loss = self.compute_loss(top_spans_scores, labels)
 
             # Print information
-            print('  validation document {} loss: {}'.format(i + 1, loss.item()))
+            # print('  validation document {} loss: {}'.format(docId, loss.item()))
 
             # Add the loss of this document
             total_loss += loss.item()
 
         # Return average loss of the validation
-        return total_loss / len(validation_data_dict)
+        return total_loss / len(validation_dataloader)
 
-    def train_one_epoch(self, training_data_dict):
+    def train_one_epoch(self, training_dataloader):
         total_loss = 0
 
         # Iterate over all training documents
-        for docId, data in training_data_dict.items():
+        for data in training_dataloader:
             # Get encoded text and true entities
-            encoded_text = data["encoding"]
-            true_entities = data["doc_entities"]
+            encoded_text = data["encoding"].squeeze()
+            true_entities = data["doc_entities"].squeeze()
 
             self.optim.zero_grad()
 
@@ -79,33 +81,34 @@ class MentionsExtractorRunner:
             self.optim.step()
 
             # Print information
-            print('  training document {} loss: {}'.format(docId, loss.item()))
+            # print('  training document {} loss: {}'.format(docId, loss.item()))
 
             # Add the loss of this document
             total_loss += loss.item()
 
         # Return average loss of the training
-        return total_loss / len(training_data_dict)
+        return total_loss / len(training_dataloader)
 
     def train(self):
         # Prepare for training
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         num_epochs = 100
         best_validation_loss = float('inf')
 
         # Get the data ready
         with torch.no_grad():
-            data_dict = utils.prepare_data(self.tokenizer, self.encoder)
+            data_list = utils.prepare_data(self.tokenizer, self.encoder)
+            dataset = custom_dataset.CustomDataset(data_list)
+            dataloader = DataLoader(dataset, batch_size=1, shuffle=True)  # TODO change code to use multiple batch sizes
 
         for epoch in range(num_epochs):
             print('EPOCH {}:'.format(epoch + 1))
 
             # Train the model and get the training loss of the current epoch
-            training_loss = self.train_one_epoch(data_dict)
+            training_loss = self.train_one_epoch(dataloader)
 
             # Compute the loss on the validation set
             with torch.no_grad():
-                validation_loss = self.get_validation_loss(data_dict)
+                validation_loss = self.get_validation_loss(dataloader)
 
             print('LOSS: train {}, valid {}'.format(training_loss, validation_loss))
 
@@ -114,5 +117,5 @@ class MentionsExtractorRunner:
                 best_validation_loss = validation_loss
                 model_path = 'saved_models/mentions_extractor'
                 os.makedirs(model_path, exist_ok=True)
-                torch.save(self.model.state_dict(), model_path + '/model.pt'.format(timestamp, epoch + 1))
+                torch.save(self.model.state_dict(), model_path + '/model_e{}.pt'.format(epoch + 1))
 

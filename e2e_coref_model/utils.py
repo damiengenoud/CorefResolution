@@ -6,7 +6,7 @@ def prepare_data(tokenizer, encoder):
     ids_folder_path = 'data'
     # splits = ['train', 'dev', 'test']
     splits = ['test']
-    data_dict = {}
+    data_list = []
     for split in splits:
         with open(ids_folder_path + '/' + split + '.txt', mode='r', encoding='utf-8') as file:
             for line in file:
@@ -14,9 +14,11 @@ def prepare_data(tokenizer, encoder):
                 print('Processing: ' + doc_id)
                 tokenized_text, word_ids_to_num_bert_tokens, doc_entities = get_conll_data(doc_id, tokenizer)
                 encoding = spanbert_encode(tokenized_text, encoder)
-                data_dict[doc_id] = {'encoding': encoding,
-                                     'doc_entities': doc_entities}
-    return data_dict
+                data_list.append({'doc_id': doc_id,
+                                  'encoding': encoding,
+                                  'doc_entities': doc_entities,
+                                  })
+    return data_list
 
 
 def get_conll_data(doc_id: str, tokenizer):
@@ -159,10 +161,11 @@ def get_mentions_labels(
         # Expands the tensors to be able to use a sort of "contains" function, see :
         # https://stackoverflow.com/questions/73524338/pytorch-test-each-row-of-the-first-2d-tensor-also-exist-in-the-second-tensor
         predicted_expand = predicted_indices.unsqueeze(1).expand(-1, true_indices.shape[0], predicted_indices.shape[1])
-        true_expand = true_indices.unsqueeze(0).expand(predicted_indices.shape[0], -1, predicted_indices.shape[1])
+        true_expand = true_indices.unsqueeze(0).expand(predicted_indices.shape[0], -1, predicted_indices.shape[1]).to(
+            torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        )
 
         # Similar to a "contains" function
-        labels = (predicted_expand == true_expand).all(-1).any(-1).short()
+        labels = (predicted_expand == true_expand).all(-1).any(-1).float()
         return labels
-
 
