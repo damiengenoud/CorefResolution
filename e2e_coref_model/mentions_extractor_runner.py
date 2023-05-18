@@ -90,7 +90,7 @@ class MentionsExtractorRunner:
 
         # Prepare sample dataset for training
         text = "I'm a penguin who likes icecream, I find it very good. My mother always said that it is bad for me to eat so much of it. I hope she is not angry about it."
-        encoded_text = bert.spanbert_encode(text).detach()
+        encoded_text = bert.spanbert_encode(text)
         encoded_training_texts_data = [encoded_text]
         encoded_validation_texts_data = [encoded_text]
 
