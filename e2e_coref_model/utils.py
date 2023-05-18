@@ -2,22 +2,19 @@ import re
 import torch
 
 
-def prepare_data(tokenizer, encoder):
+def prepare_data(tokenizer, encoder, split):
     ids_folder_path = 'data'
-    # splits = ['train', 'dev', 'test']
-    splits = ['test']
     data_list = []
-    for split in splits:
-        with open(ids_folder_path + '/' + split + '.txt', mode='r', encoding='utf-8') as file:
-            for line in file:
-                doc_id = line.rstrip()
-                print('Processing: ' + doc_id)
-                tokenized_text, word_ids_to_num_bert_tokens, doc_entities = get_conll_data(doc_id, tokenizer)
-                encoding = spanbert_encode(tokenized_text, encoder)
-                data_list.append({'doc_id': doc_id,
-                                  'encoding': encoding,
-                                  'doc_entities': doc_entities,
-                                  })
+    with open(ids_folder_path + '/' + split + '.txt', mode='r', encoding='utf-8') as file:
+        for line in file:
+            doc_id = line.rstrip()
+            print('Processing: ' + doc_id)
+            tokenized_text, word_ids_to_num_bert_tokens, doc_entities = get_conll_data(doc_id, tokenizer)
+            encoding = spanbert_encode(tokenized_text, encoder)
+            data_list.append({'doc_id': doc_id,
+                              'encoding': encoding,
+                              'doc_entities': doc_entities,
+                              })
     return data_list
 
 
