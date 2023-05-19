@@ -96,7 +96,7 @@ class MentionsExtractorRunner:
 
         # Get the data ready
         with torch.no_grad():
-            data_list = utils.prepare_data(self.tokenizer, self.encoder)
+            data_list = utils.prepare_training_data(self.tokenizer, self.encoder)
             dataset = custom_dataset.CustomDataset(data_list)
             dataloader = DataLoader(dataset, batch_size=1, shuffle=True)  # TODO change code to use multiple batch sizes
 
@@ -117,5 +117,5 @@ class MentionsExtractorRunner:
                 best_validation_loss = validation_loss
                 model_path = 'saved_models/mentions_extractor'
                 os.makedirs(model_path, exist_ok=True)
-                torch.save(self.model.state_dict(), model_path + '/model_e{}.pt'.format(epoch + 1))
+                torch.save(self.model.state_dict(), model_path + '/model.pt'.format(epoch + 1))
 

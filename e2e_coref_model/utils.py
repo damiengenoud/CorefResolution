@@ -2,7 +2,11 @@ import re
 import torch
 
 
-def prepare_data(tokenizer, encoder):
+def device():
+    return torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
+def prepare_training_data(tokenizer, encoder):
     ids_folder_path = 'data'
     # splits = ['train', 'dev', 'test']
     splits = ['test']
@@ -11,11 +15,11 @@ def prepare_data(tokenizer, encoder):
         with open(ids_folder_path + '/' + split + '.txt', mode='r', encoding='utf-8') as file:
             for line in file:
                 doc_id = line.rstrip()
-                print('Processing: ' + doc_id)
                 tokenized_text, word_ids_to_num_bert_tokens, doc_entities = get_conll_data(doc_id, tokenizer)
                 encoding = spanbert_encode(tokenized_text, encoder)
+                averaged_encoding = average_spanbert_subwords_tokens(encoding, word_ids_to_num_bert_tokens)
                 data_list.append({'doc_id': doc_id,
-                                  'encoding': encoding,
+                                  'encoding': averaged_encoding,
                                   'doc_entities': doc_entities,
                                   })
     return data_list
@@ -68,6 +72,7 @@ def get_conll_data(doc_id: str, tokenizer):
                         doc_entities.append([opened_entities[cluster_id].pop(), word_id, cluster_id])
                 word_id += 1
 
+    print("Number of tokens in conll format: " + str(word_id))
     tokenized_text = {'input_ids': input_ids,
                       'token_type_ids': torch.tensor([0] * input_ids.size(0)),
                       'attention_mask': torch.tensor([1] * input_ids.size(0))}
@@ -149,6 +154,23 @@ def spanbert_encode(tokenized_text, encoder):
     return output_tensor
 
 
+def average_spanbert_subwords_tokens(encoded_text, word_ids_to_num_bert_tokens):
+    bert_index = 0
+    averaged_word_embeddings = torch.Tensor().to(device())
+
+    for word_index, num_bert_tokens in enumerate(word_ids_to_num_bert_tokens):
+        word_embeddings = torch.Tensor().to(device())
+
+        for i in range(num_bert_tokens):
+            word_embeddings = torch.cat([word_embeddings, encoded_text[bert_index].unsqueeze(-1)])
+            bert_index += 1
+
+        averaged_word_embedding = torch.mean(word_embeddings, dim=1)
+        averaged_word_embeddings = torch.cat([averaged_word_embeddings, averaged_word_embedding.unsqueeze(0)])
+
+    return averaged_word_embeddings
+
+
 def get_mentions_labels(
         true_entities: torch.Tensor,  # [num_true_mentions, 3]
         predicted_start_indices: torch.Tensor,  # [num_predicted_spans]
@@ -162,7 +184,7 @@ def get_mentions_labels(
         # https://stackoverflow.com/questions/73524338/pytorch-test-each-row-of-the-first-2d-tensor-also-exist-in-the-second-tensor
         predicted_expand = predicted_indices.unsqueeze(1).expand(-1, true_indices.shape[0], predicted_indices.shape[1])
         true_expand = true_indices.unsqueeze(0).expand(predicted_indices.shape[0], -1, predicted_indices.shape[1]).to(
-            torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+            device()
         )
 
         # Similar to a "contains" function
