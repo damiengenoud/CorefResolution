@@ -95,7 +95,7 @@ class MentionsExtractorRunner:
 
         # Get the data ready
         with torch.no_grad():
-            train_data_list = utils.prepare_training_data(self.tokenizer, self.encoder, "train")
+            train_data_list = utils.prepare_data(self.tokenizer, self.encoder, "train")
             train_dataset = custom_dataset.CustomDataset(train_data_list)
             train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=True)  # TODO change code to use multiple batch sizes
             dev_data_list = utils.prepare_data(self.tokenizer, self.encoder, "dev")

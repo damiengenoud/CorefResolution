@@ -9,6 +9,7 @@ def device():
 def prepare_data(tokenizer, encoder, split):
     ids_folder_path = 'data'
     data_list = []
+    print("Preparing " + split + " documents...")
     with open(ids_folder_path + '/' + split + '.txt', mode='r', encoding='utf-8') as file:
         for line in file:
             doc_id = line.rstrip()
