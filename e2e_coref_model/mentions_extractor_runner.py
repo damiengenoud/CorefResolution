@@ -1,5 +1,4 @@
 import os
-from datetime import datetime
 from transformers import AutoTokenizer, AutoModel
 import torch
 from torch.utils.data import DataLoader
@@ -15,10 +14,10 @@ class MentionsExtractorRunner:
         self.tokenizer = AutoTokenizer.from_pretrained('bert-base-cased')
         self.model = mentions_extractor.MentionsExtractor(768, 0.25, 15).to(self.device)
         self.optim = torch.optim.Adam(
-            self.model.parameters(), lr=5e-5
+            self.model.parameters(), lr=5e-6
         )
-        self.lr_scheduler = torch.optim.lr_scheduler.StepLR(
-            self.optim, step_size=5, gamma=0.5
+        self.lr_scheduler = torch.optim.lr_scheduler.StepLR(  #not used for now
+            self.optim, step_size=2, gamma=0.95
         )
 
     @staticmethod
@@ -96,19 +95,22 @@ class MentionsExtractorRunner:
 
         # Get the data ready
         with torch.no_grad():
-            data_list = utils.prepare_training_data(self.tokenizer, self.encoder)
-            dataset = custom_dataset.CustomDataset(data_list)
-            dataloader = DataLoader(dataset, batch_size=1, shuffle=True)  # TODO change code to use multiple batch sizes
+            train_data_list = utils.prepare_training_data(self.tokenizer, self.encoder, "train")
+            train_dataset = custom_dataset.CustomDataset(train_data_list)
+            train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=True)  # TODO change code to use multiple batch sizes
+            dev_data_list = utils.prepare_data(self.tokenizer, self.encoder, "dev")
+            dev_dataset = custom_dataset.CustomDataset(dev_data_list)
+            dev_dataloader = DataLoader(dev_dataset, batch_size=1, shuffle=True)  # TODO change code to use multiple batch sizes
 
         for epoch in range(num_epochs):
             print('EPOCH {}:'.format(epoch + 1))
 
             # Train the model and get the training loss of the current epoch
-            training_loss = self.train_one_epoch(dataloader)
+            training_loss = self.train_one_epoch(train_dataloader)
 
             # Compute the loss on the validation set
             with torch.no_grad():
-                validation_loss = self.get_validation_loss(dataloader)
+                validation_loss = self.get_validation_loss(dev_dataloader)
 
             print('LOSS: train {}, valid {}'.format(training_loss, validation_loss))
 
