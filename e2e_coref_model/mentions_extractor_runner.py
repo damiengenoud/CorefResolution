@@ -14,7 +14,7 @@ class MentionsExtractorRunner:
         self.tokenizer = AutoTokenizer.from_pretrained('bert-base-cased')
         self.model = mentions_extractor.MentionsExtractor(768, 0.25, 15).to(self.device)
         self.optim = torch.optim.Adam(
-            self.model.parameters(), lr=5e-6
+            self.model.parameters(), lr=5e-5
         )
         self.lr_scheduler = torch.optim.lr_scheduler.StepLR(  #not used for now
             self.optim, step_size=2, gamma=0.95
