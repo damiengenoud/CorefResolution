@@ -173,8 +173,9 @@ def get_mentions_labels(
 ) -> torch.Tensor:
     with torch.no_grad():
         predicted_indices = torch.stack([predicted_start_indices, predicted_end_indices], dim=1)
+        # print("num predicted indices" + str(predicted_indices.size()))
         true_indices = true_entities[:, :2]
-
+        # print("num true indices" + str(true_indices.size()))
         # Expands the tensors to be able to use a sort of "contains" function, see :
         # https://stackoverflow.com/questions/73524338/pytorch-test-each-row-of-the-first-2d-tensor-also-exist-in-the-second-tensor
         predicted_expand = predicted_indices.unsqueeze(1).expand(-1, true_indices.shape[0], predicted_indices.shape[1])
