@@ -42,6 +42,6 @@ class MentionsExtractor(torch.nn.Module):
         top_spans_indices = torch.squeeze(top_spans_indices)  # [k]
         top_spans_start_indices = candidates_start_indices[top_spans_indices]  # [k]
         top_spans_end_indices = candidates_end_indices[top_spans_indices]  # [k]
-        top_spans_representation = candidates_spans_representation[top_spans_indices]  # [k, span_emb]
+        top_spans_embeddings = candidates_spans_representation[top_spans_indices]  # [k, span_emb]
 
-        return top_spans_start_indices, top_spans_end_indices, top_spans_scores, top_spans_representation
+        return top_spans_start_indices, top_spans_end_indices, top_spans_scores, top_spans_embeddings

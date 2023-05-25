@@ -38,7 +38,7 @@ class MentionsExtractorRunner:
             true_entities = data["doc_entities"].squeeze()
 
             # Run the mentions extractor
-            top_spans_start_indices, top_spans_end_indices, top_spans_scores, _ = self.model(encoded_text)
+            top_spans_start_indices, top_spans_end_indices, top_spans_scores = self.model(encoded_text)
 
             # Get the labels of the extracted spans
             labels = utils.get_mentions_labels(true_entities, top_spans_start_indices, top_spans_end_indices).to(self.device)
@@ -67,7 +67,7 @@ class MentionsExtractorRunner:
             self.optim.zero_grad()
 
             # Run the mentions extractor
-            top_spans_start_indices, top_spans_end_indices, top_spans_scores, _ = self.model(encoded_text)
+            top_spans_start_indices, top_spans_end_indices, top_spans_scores = self.model(encoded_text)
 
             # Get the labels of the extracted spans
             labels = utils.get_mentions_labels(true_entities, top_spans_start_indices, top_spans_end_indices).to(self.device)
@@ -90,17 +90,20 @@ class MentionsExtractorRunner:
 
     def train(self):
         # Prepare for training
-        num_epochs = 100
+        num_epochs = 50
         best_validation_loss = float('inf')
+
+        print('STARTING MENTIONS EXTRACTOR TRAINING')
+        print('------------------------------------')
 
         # Get the data ready
         with torch.no_grad():
             train_data_list = utils.prepare_data(self.tokenizer, self.encoder, "train")
             train_dataset = custom_dataset.CustomDataset(train_data_list)
-            train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=True)  # TODO change code to use multiple batch sizes
+            train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=True)
             dev_data_list = utils.prepare_data(self.tokenizer, self.encoder, "dev")
             dev_dataset = custom_dataset.CustomDataset(dev_data_list)
-            dev_dataloader = DataLoader(dev_dataset, batch_size=1, shuffle=True)  # TODO change code to use multiple batch sizes
+            dev_dataloader = DataLoader(dev_dataset, batch_size=1, shuffle=True)
 
         for epoch in range(num_epochs):
             print('EPOCH {}:'.format(epoch + 1))
@@ -119,5 +122,8 @@ class MentionsExtractorRunner:
                 best_validation_loss = validation_loss
                 model_path = 'saved_models/mentions_extractor'
                 os.makedirs(model_path, exist_ok=True)
-                torch.save(self.model.state_dict(), model_path + '/model.pt'.format(epoch + 1))
+                torch.save(self.model.state_dict(), model_path + '/mentions_extractor.pt')
+
+        print('------------------------------------')
+        print('MENTIONS EXTRACTOR TRAINING FINISHED')
 

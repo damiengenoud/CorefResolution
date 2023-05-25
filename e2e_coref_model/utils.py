@@ -25,7 +25,6 @@ def prepare_data(tokenizer, encoder, split):
 
 def get_conll_data(doc_id: str, tokenizer):
     with open("litbank/coref/conll/" + doc_id, mode='r', encoding='utf-8') as file:
-        # TODO check if sentence id is important (also with CLS and SEP tokens)
         word_id = 0
         input_ids = torch.Tensor()
         word_ids_to_num_bert_tokens = []
@@ -79,7 +78,6 @@ def get_conll_data(doc_id: str, tokenizer):
 def spanbert_encode(tokenized_text, encoder):
     with torch.no_grad():
         # config parameters
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         max_size = 512
         cls_token_id = 101
         sep_token_id = 102
@@ -120,8 +118,8 @@ def spanbert_encode(tokenized_text, encoder):
                 split_masks[i] = torch.cat([split_masks[i], torch.Tensor([0] * padding)])
 
         # create dictionary for SpanBERT input.
-        ids = torch.stack(split_ids).to(device)
-        masks = torch.stack(split_masks).to(device)
+        ids = torch.stack(split_ids).to(device())
+        masks = torch.stack(split_masks).to(device())
         data_dict = {'input_ids': ids.long(), 'attention_mask': masks.int()}
 
         # get SpanBERT encoding

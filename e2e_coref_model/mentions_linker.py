@@ -3,31 +3,53 @@ import ffnn
 
 
 class MentionsLinker(torch.nn.Module):
-
-    def __init__(self):
+    def __init__(self, mentions_extractor, bert_embedding_size: int):
         super().__init__()
-        self.ffnn = ffnn.FFNN(3 * 3 * 768)
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.bert_embedding_size = bert_embedding_size
+        self.mentions_extractor = mentions_extractor
+        self.pair_antecedent_score_model = ffnn.FFNN(3 * 3 * bert_embedding_size)
 
-    def forward(self, top_scoring_spans: torch.Tensor, top_scores: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        pairs_scores = []
-        pairs_indices = []
-        # iterate over all pairs of spans
-        for target_index in range(1, top_scoring_spans.size(0)):
-            for antecedent_index in range(0, target_index):
-                # multiply the two tensors element-wise
-                multiplied = torch.mul(top_scoring_spans[target_index], top_scoring_spans[antecedent_index])
-                # get pair score
-                pair_score = self.ffnn(torch.cat([
-                    top_scoring_spans[target_index],
-                    top_scoring_spans[antecedent_index],
-                    multiplied
-                ]))
-                # add antecedent score to the list
-                pairs_scores.append(torch.sum(torch.cat([
-                    top_scores[target_index],
-                    top_scores[antecedent_index],
-                    pair_score
-                ])))
-                # add the indices of the pair for easier linking
-                pairs_indices.append(torch.tensor([target_index, antecedent_index]))
-        return torch.stack(pairs_scores), torch.stack(pairs_indices)
+    def forward(self, encoded_text):
+        # Get mentions from mentions extractor model:
+        spans_start_indices, spans_end_indices, spans_mention_score, spans_embeddings = self.mentions_extractor(
+            encoded_text.to(self.device))
+
+        num_spans = spans_mention_score.size(0)
+
+        # Create a matrix containing the antecedents' indices of the top scoring spans
+        antecedents_distance = torch.tile(torch.arange(0, num_spans) + 1, [num_spans, 1])  # [num_spans ,num_spans]
+        raw_antecedents = torch.unsqueeze(torch.arange(num_spans), 1) - antecedents_distance  # [num_spans, num_spans]
+
+        # Create a mask for out of bound indices (it's a lower triangular matrix)
+        antecedents_mask_spans = (raw_antecedents >= 0).to(self.device)  # [num_spans, num_spans]
+
+        # Keep the indices in bound (>= 0), even the useless one, for convenience in future operations
+        antecedents = torch.maximum(raw_antecedents, torch.tensor(0)).to(self.device)  # [num_spans, num_spans]
+
+        # Antecedents is a lower triangular matrix where the line i has elements i-1 to 0,
+        # followed by num_spans - i + 1 zeros.
+        # It corresponds to the antecedents' indices of span i.
+        # Note that only the elements of the lower triangle without the diagonal are relevant, the rest will be
+        # "deleted" by the mask.
+
+        # Create a matrix where each element is the sum of the mention scores of the pair
+        pairs_mention_score = spans_mention_score.unsqueeze(1) + spans_mention_score[
+            antecedents]  # [num_spans, num_spans]
+        # Use mask_spans to put out of bound values to -inf
+        pairs_mention_score += torch.log(antecedents_mask_spans.float())  # [num_spans, num_spans]
+
+        # Get the antecedents embedding in a matrix
+        antecedents_emb = spans_embeddings[antecedents]  # [num_spans, num_spans, emb]
+
+        # Concatenate the targets embeddings, the antecedents embeddings and the multiplication of both
+        targets_embeddings = spans_embeddings.unsqueeze(1).tile([1, num_spans, 1])  # [num_spans, 1, emb]
+        mult_embeddings = targets_embeddings * spans_embeddings  # [num_spans, num_spans, emb]
+        pairs_embeddings = torch.cat([targets_embeddings, antecedents_emb, mult_embeddings],
+                                     2)  # [num_spans, num_spans, 3*emb]
+
+        # Get the antecedent score and total pair score
+        pairs_antecedent_score = self.pair_antecedent_score_model(pairs_embeddings).squeeze(2)  # [num_spans, num_spans]
+        pairs_score = pairs_mention_score + pairs_antecedent_score  # [num_spans, num_spans]
+
+        return spans_start_indices, spans_end_indices, pairs_score
