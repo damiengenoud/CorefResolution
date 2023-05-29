@@ -36,7 +36,7 @@ class MentionsExtractor(torch.nn.Module):
         candidates_mentions_scores = self.span_score_model(candidates_spans_representation)  # [num_candidates, 1]
 
         # Keep only the k top scoring spans and relative information
-        k = torch.floor(torch.tensor([300])).int().item()  # use 300 if training, 0.25*n if inference
+        k = torch.floor(torch.tensor([0.25 * num_tokens])).int().item()
         top_spans_scores, top_spans_indices = torch.topk(candidates_mentions_scores, k, 0, True, False)  # [k, 1], [k, 1]
         top_spans_scores = torch.squeeze(top_spans_scores)  # [k]
         top_spans_indices = torch.squeeze(top_spans_indices)  # [k]

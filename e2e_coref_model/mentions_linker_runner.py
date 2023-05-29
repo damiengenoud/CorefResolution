@@ -1,0 +1,146 @@
+import os
+from transformers import AutoTokenizer, AutoModel
+import torch
+from torch.utils.data import DataLoader
+import mentions_extractor_trainer
+import mentions_extractor
+import mentions_linker
+import utils
+
+
+class MentionsLinkerTrainer:
+    def __init__(self):
+        self.encoder = AutoModel.from_pretrained("SpanBERT/spanbert-large-cased").to(utils.device())
+        self.tokenizer = AutoTokenizer.from_pretrained('bert-large-cased')
+
+        self.train_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'train'), batch_size=1,
+                                           shuffle=True)
+        self.val_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'val'), batch_size=1,
+                                         shuffle=True)
+
+        self.linker = mentions_linker.MentionsLinker(self.get_mentions_extractor(False), 1024)
+
+        self.optim = torch.optim.Adam(
+            self.linker.parameters(), lr=5e-5
+        )  # TODO change
+        self.lr_scheduler = torch.optim.lr_scheduler.StepLR(  # not used for now
+            self.optim, step_size=2, gamma=0.95
+        )
+
+    def get_mentions_extractor(self, pretrained: bool):
+        if pretrained:
+            folder = 'pretrained_models/'
+        else:
+            trainer = mentions_extractor_trainer.MentionsExtractorTrainer(self.encoder, self.tokenizer, 1024)
+            trainer.train(self.train_dataloader, self.val_dataloader)
+            folder = 'my_models/'
+
+        extractor = mentions_extractor.MentionsExtractor(1024, 0.25, 15)
+        extractor.load_state_dict(torch.load('saved_models/' + folder + 'mentions_extractor.pt'))
+
+    @staticmethod
+    def compute_loss(
+            all_pairs_scores,  # [k, k + 1]
+            antecedents_labels  # [k, k + 1]
+    ):
+        true_pairs_score = all_pairs_scores + torch.log(antecedents_labels)  # [k, k + 1]
+
+        log_sum_true_antecedents_score = torch.logsumexp(true_pairs_score, 1)  # [k]
+        log_sum_all_antecedents_score = torch.logsumexp(all_pairs_scores, 1)  # [k]
+
+        loss = torch.sum(log_sum_true_antecedents_score - log_sum_all_antecedents_score)  # []
+        return -loss
+
+    @staticmethod
+    def get_labels(true_entities,  # [num_true_spans, 3]
+                   predicted_start_indices,  # [k]
+                   predicted_end_indices,  # [k]
+                   antecedents,  # [k, k]
+                   antecedents_mask  # [k, k]
+                   ) -> torch.Tensor:
+
+        predicted_indices = torch.stack([predicted_start_indices, predicted_end_indices], dim=1)  # [k]
+        true_indices = true_entities[:, :2]  # [num_true_spans, 2]
+        cluster_ids = true_entities[:, 2]  # [num_true_spans]
+
+        predicted_expand = predicted_indices.unsqueeze(1).expand(-1, true_indices.shape[0],
+                                                                 predicted_indices.shape[1])  # [k, num_true_spans, 2]
+        true_expand = true_indices.unsqueeze(0).expand(predicted_indices.shape[0], -1,
+                                                       predicted_indices.shape[1])  # [k, num_true_spans, 2]
+
+        same_span = (predicted_expand == true_expand).all(-1)  # [k, num_true_spans]
+        candidate_labels = torch.matmul(same_span.float(),
+                                        torch.unsqueeze(cluster_ids, 1).float()).squeeze().long()  # [k]
+
+        antecedents_cluster = candidate_labels[antecedents] + torch.log(antecedents_mask.float())  # [k, k]
+
+        antecedent_same_cluster = torch.logical_and(torch.eq(antecedents_cluster, candidate_labels.unsqueeze(1)),
+                                                    antecedents_cluster > 0)  # [k, k]
+        has_dummy_antecedent = torch.logical_not(antecedent_same_cluster.any(dim=1, keepdim=True))  # [k, 1]
+        antecedents_labels = torch.cat([antecedent_same_cluster, has_dummy_antecedent], 1).float()  # [k, k + 1]
+
+        return antecedents_labels  # [k, k + 1]
+
+    def one_pass(self, dataloader, training: bool):
+        total_loss = 0
+
+        # Iterate over all training documents
+        for data in dataloader:
+            # Get encoded text and true entities
+            encoded_text = data["encoding"].squeeze()
+            true_entities = data["doc_entities"].squeeze()
+
+            if training:
+                self.optim.zero_grad()
+
+            # Run the mentions linker
+            spans_start_indices, spans_end_indices, pairs_scores, antecedents, antecedents_mask = self.linker(
+                encoded_text)
+
+            # Get the labels of the extracted spans
+            labels = self.get_labels(true_entities, spans_start_indices, spans_end_indices, antecedents,
+                                     antecedents_mask).to(utils.device())
+
+            # Compute the loss
+            loss = self.compute_loss(pairs_scores, labels)
+
+            if training:
+                loss.backward()
+                # Update the weights
+                self.optim.step()
+
+            # Add the loss of this document
+            total_loss += loss.item()
+
+        # Return average loss of the training
+        return total_loss / len(dataloader)
+
+    def train(self):
+        # Prepare for training
+        num_epochs = 100
+        best_validation_loss = float('inf')
+
+        print('STARTING FULL MODEL TRAINING')
+        print('------------------------------------')
+
+        for epoch in range(num_epochs):
+            print('EPOCH {}:'.format(epoch + 1))
+
+            # Train the model and get the training loss of the current epoch
+            training_loss = self.one_pass(self.train_dataloader, True)
+
+            # Compute the loss on the validation set
+            with torch.no_grad():
+                validation_loss = self.one_pass(self.val_dataloader, False)
+
+            print('LOSS: train {}, valid {}'.format(training_loss, validation_loss))
+
+            # Save the best model (in terms of validation loss)
+            if validation_loss < best_validation_loss:
+                best_validation_loss = validation_loss
+                model_path = 'saved_models/my_models'
+                os.makedirs(model_path, exist_ok=True)
+                torch.save(self.linker.state_dict(), model_path + '/mentions_linker.pt')
+
+        print('------------------------------------')
+        print('FULL MODEL TRAINING FINISHED')

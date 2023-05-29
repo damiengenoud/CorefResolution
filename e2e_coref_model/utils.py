@@ -1,26 +1,28 @@
 import re
 import torch
+import custom_dataset
 
 
 def device():
     return torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-def prepare_data(tokenizer, encoder, split):
-    ids_folder_path = 'data'
-    data_list = []
-    print("Preparing " + split + " documents...")
-    with open(ids_folder_path + '/' + split + '.txt', mode='r', encoding='utf-8') as file:
-        for line in file:
-            doc_id = line.rstrip()
-            tokenized_text, word_ids_to_num_bert_tokens, doc_entities = get_conll_data(doc_id, tokenizer)
-            encoding = spanbert_encode(tokenized_text, encoder)
-            averaged_encoding = average_spanbert_subwords_tokens(encoding, word_ids_to_num_bert_tokens)
-            data_list.append({'doc_id': doc_id,
-                              'encoding': averaged_encoding,
-                              'doc_entities': doc_entities,
-                              })
-    return data_list
+def get_dataset(tokenizer, encoder, split):
+    with torch.no_grad():
+        ids_folder_path = 'data'
+        data_list = []
+        print("Preparing " + split + " documents...")
+        with open(ids_folder_path + '/' + split + '.txt', mode='r', encoding='utf-8') as file:
+            for line in file:
+                doc_id = line.rstrip()
+                tokenized_text, word_ids_to_num_bert_tokens, doc_entities = get_conll_data(doc_id, tokenizer)
+                encoding = spanbert_encode(tokenized_text, encoder)
+                averaged_encoding = average_spanbert_subwords_tokens(encoding, word_ids_to_num_bert_tokens)
+                data_list.append({'doc_id': doc_id,
+                                  'encoding': averaged_encoding,
+                                  'doc_entities': doc_entities,
+                                  })
+        return custom_dataset.CustomDataset(data_list)
 
 
 def get_conll_data(doc_id: str, tokenizer):
@@ -53,7 +55,7 @@ def get_conll_data(doc_id: str, tokenizer):
                 for coref_indication in coref_indications:
                     # Entire entity
                     if coref_indication.startswith('(') and coref_indication.endswith(')'):
-                        cluster_id = int(coref_indication[1])
+                        cluster_id = int(coref_indication[1]) + 1
                         doc_entities.append([word_id, word_id, cluster_id])
                     # Start of entity
                     elif coref_indication.startswith('('):
@@ -64,7 +66,7 @@ def get_conll_data(doc_id: str, tokenizer):
                         opened_entities[cluster_id].append(word_id)
                     # End of entity
                     elif coref_indication.endswith(')'):
-                        cluster_id = int(coref_indication[0])
+                        cluster_id = int(coref_indication[0]) + 1
                         # Close and add entity to entities list
                         doc_entities.append([opened_entities[cluster_id].pop(), word_id, cluster_id])
                 word_id += 1
@@ -164,26 +166,4 @@ def average_spanbert_subwords_tokens(encoded_text, word_ids_to_num_bert_tokens):
         averaged_word_embeddings = torch.cat([averaged_word_embeddings, averaged_word_embedding.unsqueeze(0)])
 
     return averaged_word_embeddings
-
-
-def get_mentions_labels(
-        true_entities: torch.Tensor,  # [num_true_mentions, 3]
-        predicted_start_indices: torch.Tensor,  # [num_predicted_spans]
-        predicted_end_indices: torch.Tensor  # [num_predicted_spans]
-) -> torch.Tensor:
-    with torch.no_grad():
-        predicted_indices = torch.stack([predicted_start_indices, predicted_end_indices], dim=1)
-        # print("num predicted indices" + str(predicted_indices.size()))
-        true_indices = true_entities[:, :2]
-        # print("num true indices" + str(true_indices.size()))
-        # Expands the tensors to be able to use a sort of "contains" function, see :
-        # https://stackoverflow.com/questions/73524338/pytorch-test-each-row-of-the-first-2d-tensor-also-exist-in-the-second-tensor
-        predicted_expand = predicted_indices.unsqueeze(1).expand(-1, true_indices.shape[0], predicted_indices.shape[1])
-        true_expand = true_indices.unsqueeze(0).expand(predicted_indices.shape[0], -1, predicted_indices.shape[1]).to(
-            device()
-        )
-
-        # Similar to a "contains" function
-        labels = (predicted_expand == true_expand).all(-1).any(-1).float()
-        return labels
 
