@@ -1,12 +1,11 @@
 import torch
 import ffnn
+import utils
 
 
 class SpanAttentionEmbedder(torch.nn.Module):
-
     def __init__(self, bert_embedding_size: int):
         super().__init__()
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.ffnn = ffnn.FFNN(bert_embedding_size)
 
     def forward(self, spanbert_out: torch.Tensor, spans_start: torch.Tensor, spans_end: torch.Tensor,
@@ -30,7 +29,7 @@ class SpanAttentionEmbedder(torch.nn.Module):
         spans_embedding_list.append(spans_end_emb)
 
         # Get the indices of each possible span (even if the indices are larger than the number of tokens)
-        spans_indices = torch.arange(max_span_width).unsqueeze(0).to(self.device) + spans_start.unsqueeze(
+        spans_indices = torch.arange(max_span_width).unsqueeze(0).to(utils.device()) + spans_start.unsqueeze(
             1)  # [num_candidates, max_span_width]
         spans_indices = torch.where(spans_indices < num_tokens, spans_indices,
                                     num_tokens - 1)  # [num_candidates, max_span_width]
@@ -40,7 +39,7 @@ class SpanAttentionEmbedder(torch.nn.Module):
         # Get the attention scores of each token in the spans (using masking to remove unwanted tokens)
         spans_width = spans_end - spans_start + 1  # [num_candidates]
         spans_tokens_attention = tokens_attention_score[spans_indices]  # [num_candidates, max_span_width, 1]
-        spans_mask = torch.lt(torch.arange(max_span_width).unsqueeze(0).to(self.device),
+        spans_mask = torch.lt(torch.arange(max_span_width).unsqueeze(0).to(utils.device()),
                               spans_width.unsqueeze(1)).unsqueeze(2).float()  # [num_candidates, max_span_width, 1]
         spans_tokens_attention += torch.log(spans_mask)  # [num_candidates, max_span_width, 1]
 

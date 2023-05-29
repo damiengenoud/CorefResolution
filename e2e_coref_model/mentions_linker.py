@@ -2,10 +2,10 @@ import torch
 import ffnn
 import utils
 
+
 class MentionsLinker(torch.nn.Module):
     def __init__(self, mentions_extractor, bert_embedding_size: int):
         super().__init__()
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.bert_embedding_size = bert_embedding_size
         self.mentions_extractor = mentions_extractor
         self.pair_antecedent_score_model = ffnn.FFNN(3 * 3 * bert_embedding_size)
@@ -13,7 +13,7 @@ class MentionsLinker(torch.nn.Module):
     def forward(self, encoded_text):
         # Get mentions from mentions extractor model:
         spans_start_indices, spans_end_indices, spans_mention_score, spans_embeddings = self.mentions_extractor(
-            encoded_text.to(self.device))
+            encoded_text.to(utils.device()))
 
         num_spans = spans_mention_score.size(0)
 
@@ -22,10 +22,10 @@ class MentionsLinker(torch.nn.Module):
         raw_antecedents = torch.unsqueeze(torch.arange(num_spans), 1) - antecedents_distance  # [num_spans, num_spans]
 
         # Create a mask for out of bound indices (it's a lower triangular matrix)
-        antecedents_mask = (raw_antecedents >= 0).to(self.device)  # [num_spans, num_spans]
+        antecedents_mask = (raw_antecedents >= 0).to(utils.device())  # [num_spans, num_spans]
 
         # Keep the indices in bound (>= 0), even the useless one, for convenience in future operations
-        antecedents = torch.maximum(raw_antecedents, torch.tensor(0)).to(self.device)  # [num_spans, num_spans]
+        antecedents = torch.maximum(raw_antecedents, torch.tensor(0)).to(utils.device())  # [num_spans, num_spans]
 
         # Antecedents is a lower triangular matrix where the line i has numbers i - 1 to 0,
         # followed by (num_spans - i + 1) zeros.

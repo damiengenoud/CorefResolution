@@ -1,21 +1,20 @@
 import os
 import torch
-from torch.utils.data import DataLoader
 import mentions_extractor
 import utils
-import custom_dataset
+import config
 
 
 class MentionsExtractorTrainer:
     def __init__(self, encoder, tokenizer, bert_embedding_size):
         self.encoder = encoder
         self.tokenizer = tokenizer
-        self.extractor = mentions_extractor.MentionsExtractor(bert_embedding_size, 0.25, 15).to(utils.device())
+        self.extractor = mentions_extractor.MentionsExtractor(bert_embedding_size, config.TOP_SPAN_RATIO, config.MAX_SPAN_LENGTH).to(utils.device())
         self.optim = torch.optim.Adam(
-            self.extractor.parameters(), lr=5e-5
+            self.extractor.parameters(), lr=config.MENTIONS_EXTRACTOR_LR
         )
         self.lr_scheduler = torch.optim.lr_scheduler.StepLR(  # not used for now
-            self.optim, step_size=2, gamma=0.95
+            self.optim, step_size=config.MENTIONS_EXTRACTOR_LR_DECAY_STEP, gamma=config.MENTIONS_EXTRACTOR_LR_DECAY
         )
 
     @staticmethod

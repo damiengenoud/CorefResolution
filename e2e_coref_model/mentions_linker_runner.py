@@ -6,36 +6,37 @@ import mentions_extractor_trainer
 import mentions_extractor
 import mentions_linker
 import utils
+import config
 
 
 class MentionsLinkerTrainer:
     def __init__(self):
-        self.encoder = AutoModel.from_pretrained("SpanBERT/spanbert-large-cased").to(utils.device())
-        self.tokenizer = AutoTokenizer.from_pretrained('bert-large-cased')
+        self.encoder = AutoModel.from_pretrained(config.SPANBERT_MODEL).to(utils.device())
+        self.tokenizer = AutoTokenizer.from_pretrained(config.SPANBERT_TOKENIZER)
 
         self.train_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'train'), batch_size=1,
                                            shuffle=True)
         self.val_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'val'), batch_size=1,
                                          shuffle=True)
 
-        self.linker = mentions_linker.MentionsLinker(self.get_mentions_extractor(False), 1024)
+        self.linker = mentions_linker.MentionsLinker(self.get_mentions_extractor(False), config.BERT_EMB_SIZE)
 
         self.optim = torch.optim.Adam(
-            self.linker.parameters(), lr=5e-5
-        )  # TODO change
+            self.linker.parameters(), lr=config.MENTIONS_LINKER_LR
+        )
         self.lr_scheduler = torch.optim.lr_scheduler.StepLR(  # not used for now
-            self.optim, step_size=2, gamma=0.95
+            self.optim, step_size=config.MENTIONS_LINKER_LR_DECAY_STEP, gamma=config.MENTIONS_LINKER_LR_DECAY
         )
 
     def get_mentions_extractor(self, pretrained: bool):
         if pretrained:
             folder = 'pretrained_models/'
         else:
-            trainer = mentions_extractor_trainer.MentionsExtractorTrainer(self.encoder, self.tokenizer, 1024)
+            trainer = mentions_extractor_trainer.MentionsExtractorTrainer(self.encoder, self.tokenizer, config.BERT_EMB_SIZE)
             trainer.train(self.train_dataloader, self.val_dataloader)
             folder = 'my_models/'
 
-        extractor = mentions_extractor.MentionsExtractor(1024, 0.25, 15)
+        extractor = mentions_extractor.MentionsExtractor(config.BERT_EMB_SIZE, config.TOP_SPAN_RATIO, config.MAX_SPAN_LENGTH)
         extractor.load_state_dict(torch.load('saved_models/' + folder + 'mentions_extractor.pt'))
 
     @staticmethod
@@ -106,8 +107,8 @@ class MentionsLinkerTrainer:
 
             if training:
                 loss.backward()
-                # Update the weights
                 self.optim.step()
+                self.lr_scheduler.step()
 
             # Add the loss of this document
             total_loss += loss.item()
