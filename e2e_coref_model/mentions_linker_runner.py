@@ -11,7 +11,7 @@ import config
 
 class MentionsLinkerTrainer:
     def __init__(self):
-        self.encoder = AutoModel.from_pretrained(config.SPANBERT_MODEL).to(utils.device())
+        self.encoder = AutoModel.from_pretrained(config.SPANBERT_MODEL).to(utils.device)
         self.tokenizer = AutoTokenizer.from_pretrained(config.SPANBERT_TOKENIZER)
 
         self.train_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'train'), batch_size=1,
@@ -100,7 +100,7 @@ class MentionsLinkerTrainer:
 
             # Get the labels of the extracted spans
             labels = self.get_labels(true_entities, spans_start_indices, spans_end_indices, antecedents,
-                                     antecedents_mask).to(utils.device())
+                                     antecedents_mask).to(utils.device)
 
             # Compute the loss
             loss = self.compute_loss(pairs_scores, labels)

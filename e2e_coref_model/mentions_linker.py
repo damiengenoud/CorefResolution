@@ -13,7 +13,7 @@ class MentionsLinker(torch.nn.Module):
     def forward(self, encoded_text):
         # Get mentions from mentions extractor model:
         spans_start_indices, spans_end_indices, spans_mention_score, spans_embeddings = self.mentions_extractor(
-            encoded_text.to(utils.device()))
+            encoded_text.to(utils.device))
 
         num_spans = spans_mention_score.size(0)
 
@@ -22,10 +22,10 @@ class MentionsLinker(torch.nn.Module):
         raw_antecedents = torch.unsqueeze(torch.arange(num_spans), 1) - antecedents_distance  # [num_spans, num_spans]
 
         # Create a mask for out of bound indices (it's a lower triangular matrix)
-        antecedents_mask = (raw_antecedents >= 0).to(utils.device())  # [num_spans, num_spans]
+        antecedents_mask = (raw_antecedents >= 0).to(utils.device)  # [num_spans, num_spans]
 
         # Keep the indices in bound (>= 0), even the useless one, for convenience in future operations
-        antecedents = torch.maximum(raw_antecedents, torch.tensor(0)).to(utils.device())  # [num_spans, num_spans]
+        antecedents = torch.maximum(raw_antecedents, torch.tensor(0)).to(utils.device)  # [num_spans, num_spans]
 
         # Antecedents is a lower triangular matrix where the line i has numbers i - 1 to 0,
         # followed by (num_spans - i + 1) zeros.
@@ -50,7 +50,7 @@ class MentionsLinker(torch.nn.Module):
 
         # Get the antecedent score and total pairs score
         pairs_antecedent_score = self.pair_antecedent_score_model(pairs_embeddings).squeeze(2)  # [num_spans, num_spans]
-        dummy_score = torch.zeros([num_spans, 1]).to(utils.device())
+        dummy_score = torch.zeros([num_spans, 1]).to(utils.device)
         pairs_score = torch.cat([pairs_mention_score + pairs_antecedent_score, dummy_score], 1)  # [num_spans, num_spans + 1]
 
         return spans_start_indices, spans_end_indices, pairs_score, antecedents, antecedents_mask

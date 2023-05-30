@@ -18,7 +18,7 @@ class MentionsExtractor(torch.nn.Module):
 
         # Get all possible start and end indices of the spans up to length max_span_width
         candidates_start_indices = torch.tile(torch.arange(num_tokens).unsqueeze(1).to(self.device), [1, self.max_span_width]) # [num_tokens, max_span_width]
-        candidates_end_indices = candidates_start_indices + torch.arange(self.max_span_width).unsqueeze(0).to(utils.device())  #[num_tokens, max_span_width]
+        candidates_end_indices = candidates_start_indices + torch.arange(self.max_span_width).unsqueeze(0).to(utils.device)  #[num_tokens, max_span_width]
 
         # Create a mask for all spans whose end is out of bounds
         candidates_mask = torch.reshape(torch.where(candidates_end_indices < num_tokens, True, False), [-1])  # [num_tokens * max_span_width]

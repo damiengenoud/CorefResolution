@@ -9,7 +9,7 @@ class MentionsExtractorTrainer:
     def __init__(self, encoder, tokenizer, bert_embedding_size):
         self.encoder = encoder
         self.tokenizer = tokenizer
-        self.extractor = mentions_extractor.MentionsExtractor(bert_embedding_size, config.TOP_SPAN_RATIO, config.MAX_SPAN_LENGTH).to(utils.device())
+        self.extractor = mentions_extractor.MentionsExtractor(bert_embedding_size, config.TOP_SPAN_RATIO, config.MAX_SPAN_LENGTH).to(utils.device)
         self.optim = torch.optim.Adam(
             self.extractor.parameters(), lr=config.MENTIONS_EXTRACTOR_LR
         )
@@ -40,7 +40,7 @@ class MentionsExtractorTrainer:
                                                                      predicted_indices.shape[1])
             true_expand = true_indices.unsqueeze(0).expand(predicted_indices.shape[0], -1,
                                                            predicted_indices.shape[1]).to(
-                utils.device()
+                utils.device
             )
 
             # Similar to a "contains" function
@@ -64,7 +64,7 @@ class MentionsExtractorTrainer:
 
             # Get the labels of the extracted spans
             labels = self.get_mentions_labels(true_entities, top_spans_start_indices, top_spans_end_indices).to(
-                utils.device())
+                utils.device)
 
             # Compute the loss
             loss = self.compute_loss(top_spans_scores, labels)

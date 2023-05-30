@@ -1,10 +1,11 @@
 import re
+import os
+from collections import defaultdict
 import torch
 import custom_dataset
+import config
 
-
-def device():
-    return torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def get_dataset(tokenizer, encoder, split):
@@ -26,7 +27,7 @@ def get_dataset(tokenizer, encoder, split):
 
 
 def get_conll_data(doc_id: str, tokenizer):
-    with open("litbank/coref/conll/" + doc_id, mode='r', encoding='utf-8') as file:
+    with open(config.CONLL_LITBANK_FOLDER + doc_id, mode='r', encoding='utf-8') as file:
         word_id = 0
         input_ids = torch.Tensor()
         word_ids_to_num_bert_tokens = []
@@ -77,6 +78,49 @@ def get_conll_data(doc_id: str, tokenizer):
     return tokenized_text, torch.tensor(word_ids_to_num_bert_tokens), torch.tensor(doc_entities)
 
 
+def write_conll(doc_id: str, spans_starts, spans_ends, spans_clusters):
+    doc_id = '11_alices_adventures_in_wonderland_brat.conll'
+
+    single_word = defaultdict(lambda: [])
+    starts = defaultdict(lambda: [])
+    ends = defaultdict(lambda: [])
+    for start, end, cluster_num in zip(spans_starts, spans_ends, spans_clusters):
+        if start == end:
+            single_word[start].append(cluster_num)
+        else:
+            starts[start].append(cluster_num)
+            ends[end].append(cluster_num)
+
+    os.makedirs(config.CONLL_EVAL_OUTPUT_FOLDER, exist_ok=True)
+    with open(config.CONLL_LITBANK_FOLDER + doc_id, mode='r', encoding='utf-8') as litbank_file, \
+            open(config.CONLL_EVAL_OUTPUT_FOLDER + doc_id, mode='w', encoding='utf-8') as output_file:
+        word_id = 0
+        for line in litbank_file:
+            # Start or end of doc, or blank line
+            if line.startswith('#begin document') or line.startswith('#end document') or line == '\n':
+                output_file.write(line)
+                continue
+            # "Word" line
+            else:
+                # Get all coref cluster information for the line
+                coref_indications = []
+                for cluster_num in starts[word_id]:
+                    coref_indications.append(f"({cluster_num}")
+                for cluster_num in single_word[word_id]:
+                    coref_indications.append(f"({cluster_num})")
+                for cluster_num in ends[word_id]:
+                    coref_indications.append(f"{cluster_num})")
+                coref_indication = "|".join(coref_indications) if len(coref_indications) != 0 else "_"
+
+                # Write the new line in the output file
+                parts = re.split("\s+", line.rstrip())
+                parts[-1] = coref_indication
+                output_line = "\t".join(parts)
+                output_file.write(output_line + '\n')
+
+                word_id += 1
+
+
 def spanbert_encode(tokenized_text, encoder):
     with torch.no_grad():
         # config parameters
@@ -120,8 +164,8 @@ def spanbert_encode(tokenized_text, encoder):
                 split_masks[i] = torch.cat([split_masks[i], torch.Tensor([0] * padding)])
 
         # create dictionary for SpanBERT input.
-        ids = torch.stack(split_ids).to(device())
-        masks = torch.stack(split_masks).to(device())
+        ids = torch.stack(split_ids).to(device)
+        masks = torch.stack(split_masks).to(device)
         data_dict = {'input_ids': ids.long(), 'attention_mask': masks.int()}
 
         # get SpanBERT encoding
@@ -153,10 +197,10 @@ def spanbert_encode(tokenized_text, encoder):
 
 def average_spanbert_subwords_tokens(encoded_text, word_ids_to_num_bert_tokens):
     bert_index = 0
-    averaged_word_embeddings = torch.Tensor().to(device())
+    averaged_word_embeddings = torch.Tensor().to(device)
 
     for word_index, num_bert_tokens in enumerate(word_ids_to_num_bert_tokens):
-        word_embeddings = torch.Tensor().to(device())
+        word_embeddings = torch.Tensor().to(device)
 
         for i in range(num_bert_tokens):
             word_embeddings = torch.cat([word_embeddings, encoded_text[bert_index].unsqueeze(-1)])
