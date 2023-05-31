@@ -7,6 +7,7 @@ import mentions_extractor
 import mentions_linker
 import utils
 import config
+import subprocess
 
 
 class MentionsLinkerTrainer:
@@ -165,7 +166,7 @@ class MentionsLinkerTrainer:
             # Write the CONLL files for scorer
             utils.write_conll(data["doc_id"], spans_start_indices, spans_end_indices, clusters)
 
-            # TODO run scorer
+
 
         print('------------------------------------')
         print('MODEL EVALUATION FINISHED')
