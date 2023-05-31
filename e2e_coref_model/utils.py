@@ -4,6 +4,7 @@ from collections import defaultdict
 import torch
 import custom_dataset
 import config
+import networkx as nx
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -72,18 +73,29 @@ def get_conll_data(doc_id: str, tokenizer):
                         doc_entities.append([opened_entities[cluster_id].pop(), word_id, cluster_id])
                 word_id += 1
 
+    # TODO maybe check to remove singletons... to discuss
+
     tokenized_text = {'input_ids': input_ids,
                       'token_type_ids': torch.tensor([0] * input_ids.size(0)),
                       'attention_mask': torch.tensor([1] * input_ids.size(0))}
     return tokenized_text, torch.tensor(word_ids_to_num_bert_tokens), torch.tensor(doc_entities)
 
 
-def write_conll(doc_id: str, spans_starts, spans_ends, spans_clusters):
-    doc_id = '11_alices_adventures_in_wonderland_brat.conll'
-
+def write_conll(doc_id, spans_starts, spans_ends, spans_clusters):
     single_word = defaultdict(lambda: [])
     starts = defaultdict(lambda: [])
     ends = defaultdict(lambda: [])
+
+    for cluster_num, cluster in enumerate(spans_clusters):
+        for span_num in cluster:
+            start = starts[span_num]
+            end = ends[span_num]
+            if start == end:
+                single_word[start].append(cluster_num)
+            else:
+                starts[start].append(cluster_num)
+                ends[end].append(cluster_num)
+
     for start, end, cluster_num in zip(spans_starts, spans_ends, spans_clusters):
         if start == end:
             single_word[start].append(cluster_num)
@@ -119,6 +131,25 @@ def write_conll(doc_id: str, spans_starts, spans_ends, spans_clusters):
                 output_file.write(output_line + '\n')
 
                 word_id += 1
+
+
+def clusterize_antecedents(
+        pairs_score,  # [k, k + 1]
+):
+    k = pairs_score.size(0)
+    best_antecedent = torch.argmax(pairs_score, 1)  # [k]
+    best_antecedent_pair = torch.stack([torch.tensor(range(k)), best_antecedent], 1).numpy()  # [k, 2]
+    # Remove singleton mentions and mentions linked to dummy antecedent
+    best_antecedent_pair = best_antecedent_pair[best_antecedent_pair[:, 1] != k]  # [num_spans_in_clusters, 2]
+
+    # Use graph algorithm to cluster the pairs of mentions-antecedents
+    clusters = []
+    graph = nx.Graph()
+    graph.add_edges_from(best_antecedent_pair)
+    for connected_nodes in nx.connected_components(graph):
+        clusters.append(list(connected_nodes))
+
+    return clusters
 
 
 def spanbert_encode(tokenized_text, encoder):

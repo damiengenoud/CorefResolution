@@ -18,6 +18,8 @@ class MentionsLinkerTrainer:
                                            shuffle=True)
         self.val_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'val'), batch_size=1,
                                          shuffle=True)
+        self.test_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'test'), batch_size=1,
+                                          shuffle=True)
 
         self.linker = mentions_linker.MentionsLinker(self.get_mentions_extractor(False), config.BERT_EMB_SIZE)
 
@@ -113,18 +115,16 @@ class MentionsLinkerTrainer:
             # Add the loss of this document
             total_loss += loss.item()
 
-        # Return average loss of the training
+        # Return average loss of the training and
         return total_loss / len(dataloader)
 
     def train(self):
-        # Prepare for training
-        num_epochs = 100
         best_validation_loss = float('inf')
 
         print('STARTING FULL MODEL TRAINING')
         print('------------------------------------')
 
-        for epoch in range(num_epochs):
+        for epoch in range(config.MENTIONS_LINKER_EPOCHS):
             print('EPOCH {}:'.format(epoch + 1))
 
             # Train the model and get the training loss of the current epoch
@@ -145,3 +145,27 @@ class MentionsLinkerTrainer:
 
         print('------------------------------------')
         print('FULL MODEL TRAINING FINISHED')
+
+    def eval(self):
+        print('STARTING MODEL EVALUATION')
+        print('------------------------------------')
+
+        # Iterate over all documents
+        for data in self.test_dataloader:
+            # Get encoded text and true entities
+            encoded_text = data["encoding"].squeeze()
+
+            # Run the mentions linker
+            spans_start_indices, spans_end_indices, pairs_scores, _, _ = self.linker(
+                encoded_text)
+
+            # Clusterize the result
+            clusters = utils.clusterize_antecedents(pairs_scores)
+
+            # Write the CONLL files for scorer
+            utils.write_conll(data["doc_id"], spans_start_indices, spans_end_indices, clusters)
+
+            # TODO run scorer
+
+        print('------------------------------------')
+        print('MODEL EVALUATION FINISHED')

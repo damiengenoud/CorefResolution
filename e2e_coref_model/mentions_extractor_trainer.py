@@ -81,14 +81,12 @@ class MentionsExtractorTrainer:
         return total_loss / len(dataloader)
 
     def train(self, train_dataloader, val_dataloader):
-        # Prepare for training
-        num_epochs = 50
         best_validation_loss = float('inf')
 
         print('STARTING MENTIONS EXTRACTOR TRAINING')
         print('------------------------------------')
 
-        for epoch in range(num_epochs):
+        for epoch in range(config.MENTIONS_EXTRACTOR_EPOCHS):
             print('EPOCH {}:'.format(epoch + 1))
 
             # Train the model and get the training loss of the current epoch
