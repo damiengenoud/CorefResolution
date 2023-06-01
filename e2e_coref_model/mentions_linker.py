@@ -56,6 +56,6 @@ class MentionsLinker(torch.nn.Module):
 
         return spans_start_indices, spans_end_indices, pairs_score, antecedents, antecedents_mask
 
-    def load_extractor(self, model_path:str):
+    def load_extractor(self, model_path: str):
         self.mentions_extractor.load_state_dict(torch.load(model_path + config.MENTIONS_EXTRACTOR_MODEL_NAME))
 

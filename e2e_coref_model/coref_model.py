@@ -7,12 +7,13 @@ import conll
 import config
 import utils
 
+
 class CorefModel:
     def __init__(self):
         self.encoder = AutoModel.from_pretrained(config.SPANBERT_MODEL).to(utils.device)
         self.tokenizer = AutoTokenizer.from_pretrained(config.SPANBERT_TOKENIZER)
 
-        self.linker = mentions_linker.MentionsLinker()
+        self.linker = mentions_linker.MentionsLinker().to(utils.device)
 
         self.optim = torch.optim.Adam(
             self.linker.parameters(), lr=config.MENTIONS_LINKER_LR
@@ -90,7 +91,7 @@ class CorefModel:
             if training:
                 loss.backward()
                 self.optim.step()
-                self.lr_scheduler.step()
+                # self.lr_scheduler.step()
 
             # Add the loss of this document
             total_loss += loss.item()
@@ -135,6 +136,7 @@ class CorefModel:
         print('FULL MODEL TRAINING FINISHED')
         print('------------------------------------')
 
+    @torch.no_grad()
     def eval(self, model_folder_path: str = config.PRETRAINED_MODELS_FOLDER):
         # Prepare eval data
         test_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'test'), batch_size=1,
@@ -143,7 +145,7 @@ class CorefModel:
         print('STARTING MODEL EVALUATION')
 
         # Load linker
-        linker = mentions_linker.MentionsLinker()
+        linker = mentions_linker.MentionsLinker().to(utils.device)
         linker.load_state_dict(torch.load(model_folder_path + config.COREF_MODEL_NAME))
 
         # Iterate over all documents
