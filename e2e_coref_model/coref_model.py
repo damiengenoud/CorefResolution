@@ -3,9 +3,9 @@ import torch
 from torch.utils.data import DataLoader
 import mentions_extractor_trainer
 import mentions_linker
-import utils
+import conll
 import config
-
+import utils
 
 class CorefModel:
     def __init__(self):
@@ -158,7 +158,7 @@ class CorefModel:
             clusters = utils.clusterize_antecedents(pairs_scores)
 
             # Write the CONLL files for scorer
-            utils.write_conll(data["doc_id"][0], spans_start_indices, spans_end_indices, clusters)
+            conll.write_conll(data["doc_id"][0], spans_start_indices, spans_end_indices, clusters)
 
             # TODO add scorer call, does not work on windows...
 
