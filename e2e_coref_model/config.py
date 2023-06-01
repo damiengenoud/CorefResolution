@@ -1,7 +1,7 @@
 # SPANBERT
-BERT_EMB_SIZE = 768
-SPANBERT_MODEL = "SpanBERT/spanbert-base-cased"
-SPANBERT_TOKENIZER = 'bert-base-cased'
+BERT_EMB_SIZE = 1024
+SPANBERT_MODEL = "SpanBERT/spanbert-large-cased"
+SPANBERT_TOKENIZER = 'bert-large-cased'
 
 # PRUNNING
 TOP_SPAN_RATIO = 0.25
