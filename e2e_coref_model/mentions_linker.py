@@ -1,14 +1,15 @@
 import torch
 import ffnn
 import utils
+import config
+import mentions_extractor
 
 
 class MentionsLinker(torch.nn.Module):
-    def __init__(self, mentions_extractor, bert_embedding_size: int):
+    def __init__(self):
         super().__init__()
-        self.bert_embedding_size = bert_embedding_size
-        self.mentions_extractor = mentions_extractor
-        self.pair_antecedent_score_model = ffnn.FFNN(3 * 3 * bert_embedding_size)
+        self.mentions_extractor = mentions_extractor.MentionsExtractor()
+        self.pair_antecedent_score_model = ffnn.FFNN(3 * 3 * config.BERT_EMB_SIZE)
 
     def forward(self, encoded_text):
         # Get mentions from mentions extractor model:
@@ -54,3 +55,7 @@ class MentionsLinker(torch.nn.Module):
         pairs_score = torch.cat([pairs_mention_score + pairs_antecedent_score, dummy_score], 1)  # [num_spans, num_spans + 1]
 
         return spans_start_indices, spans_end_indices, pairs_score, antecedents, antecedents_mask
+
+    def load_extractor(self, model_path:str):
+        self.mentions_extractor.load_state_dict(torch.load(model_path + config.MENTIONS_EXTRACTOR_MODEL_NAME))
+

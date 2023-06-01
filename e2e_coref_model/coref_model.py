@@ -1,28 +1,18 @@
-import os
 from transformers import AutoTokenizer, AutoModel
 import torch
 from torch.utils.data import DataLoader
 import mentions_extractor_trainer
-import mentions_extractor
 import mentions_linker
 import utils
 import config
-import subprocess
 
 
-class MentionsLinkerTrainer:
+class CorefModel:
     def __init__(self):
         self.encoder = AutoModel.from_pretrained(config.SPANBERT_MODEL).to(utils.device)
         self.tokenizer = AutoTokenizer.from_pretrained(config.SPANBERT_TOKENIZER)
 
-        self.train_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'train'), batch_size=1,
-                                           shuffle=True)
-        self.val_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'val'), batch_size=1,
-                                         shuffle=True)
-        self.test_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'test'), batch_size=1,
-                                          shuffle=True)
-
-        self.linker = mentions_linker.MentionsLinker(self.get_mentions_extractor(False), config.BERT_EMB_SIZE)
+        self.linker = mentions_linker.MentionsLinker()
 
         self.optim = torch.optim.Adam(
             self.linker.parameters(), lr=config.MENTIONS_LINKER_LR
@@ -30,17 +20,6 @@ class MentionsLinkerTrainer:
         self.lr_scheduler = torch.optim.lr_scheduler.StepLR(  # not used for now
             self.optim, step_size=config.MENTIONS_LINKER_LR_DECAY_STEP, gamma=config.MENTIONS_LINKER_LR_DECAY
         )
-
-    def get_mentions_extractor(self, pretrained: bool):
-        if pretrained:
-            folder = 'pretrained_models/'
-        else:
-            trainer = mentions_extractor_trainer.MentionsExtractorTrainer(self.encoder, self.tokenizer, config.BERT_EMB_SIZE)
-            trainer.train(self.train_dataloader, self.val_dataloader)
-            folder = 'my_models/'
-
-        extractor = mentions_extractor.MentionsExtractor(config.BERT_EMB_SIZE, config.TOP_SPAN_RATIO, config.MAX_SPAN_LENGTH)
-        extractor.load_state_dict(torch.load('saved_models/' + folder + 'mentions_extractor.pt'))
 
     @staticmethod
     def compute_loss(
@@ -119,54 +98,69 @@ class MentionsLinkerTrainer:
         # Return average loss of the training and
         return total_loss / len(dataloader)
 
-    def train(self):
-        best_validation_loss = float('inf')
+    def train(self, model_save_folder_path: str = config.MY_MODELS_FOLDER):
+        # Prepare the dataset
+        train_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'train'), batch_size=1,
+                                      shuffle=True)
+        val_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'val'), batch_size=1,
+                                    shuffle=True)
+
+        # Train the mentions extractor
+        extractor_trainer = mentions_extractor_trainer.MentionsExtractorTrainer()
+        extractor_trainer.train(train_dataloader, val_dataloader, model_save_folder_path)
+
+        # Load trained mentions extractor in linker
+        self.linker.load_extractor(model_save_folder_path)
 
         print('STARTING FULL MODEL TRAINING')
-        print('------------------------------------')
+        best_validation_loss = float('inf')
 
         for epoch in range(config.MENTIONS_LINKER_EPOCHS):
             print('EPOCH {}:'.format(epoch + 1))
 
             # Train the model and get the training loss of the current epoch
-            training_loss = self.one_pass(self.train_dataloader, True)
+            training_loss = self.one_pass(train_dataloader, True)
 
             # Compute the loss on the validation set
             with torch.no_grad():
-                validation_loss = self.one_pass(self.val_dataloader, False)
+                validation_loss = self.one_pass(val_dataloader, False)
 
             print('LOSS: train {}, valid {}'.format(training_loss, validation_loss))
 
             # Save the best model (in terms of validation loss)
             if validation_loss < best_validation_loss:
                 best_validation_loss = validation_loss
-                model_path = 'saved_models/my_models'
-                os.makedirs(model_path, exist_ok=True)
-                torch.save(self.linker.state_dict(), model_path + '/mentions_linker.pt')
+                torch.save(self.linker.state_dict(), model_save_folder_path + config.COREF_MODEL_NAME)
 
-        print('------------------------------------')
         print('FULL MODEL TRAINING FINISHED')
-
-    def eval(self):
-        print('STARTING MODEL EVALUATION')
         print('------------------------------------')
+
+    def eval(self, model_folder_path: str = config.PRETRAINED_MODELS_FOLDER):
+        # Prepare eval data
+        test_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'test'), batch_size=1,
+                                     shuffle=True)
+
+        print('STARTING MODEL EVALUATION')
+
+        # Load linker
+        linker = mentions_linker.MentionsLinker()
+        linker.load_state_dict(torch.load(model_folder_path + config.COREF_MODEL_NAME))
 
         # Iterate over all documents
-        for data in self.test_dataloader:
+        for data in test_dataloader:
             # Get encoded text and true entities
             encoded_text = data["encoding"].squeeze()
 
             # Run the mentions linker
-            spans_start_indices, spans_end_indices, pairs_scores, _, _ = self.linker(
-                encoded_text)
+            spans_start_indices, spans_end_indices, pairs_scores, _, _ = linker(encoded_text)
 
             # Clusterize the result
             clusters = utils.clusterize_antecedents(pairs_scores)
 
             # Write the CONLL files for scorer
-            utils.write_conll(data["doc_id"], spans_start_indices, spans_end_indices, clusters)
+            utils.write_conll(data["doc_id"][0], spans_start_indices, spans_end_indices, clusters)
 
-
+            # TODO add scorer call, does not work on windows...
 
         print('------------------------------------')
         print('MODEL EVALUATION FINISHED')

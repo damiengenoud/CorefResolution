@@ -6,7 +6,8 @@ import custom_dataset
 import config
 import networkx as nx
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu")
 
 
 def get_dataset(tokenizer, encoder, split):
@@ -61,7 +62,7 @@ def get_conll_data(doc_id: str, tokenizer):
                         doc_entities.append([word_id, word_id, cluster_id])
                     # Start of entity
                     elif coref_indication.startswith('('):
-                        cluster_id = int(coref_indication[1])
+                        cluster_id = int(coref_indication[1]) + 1
                         # Remember this entity as opened
                         if cluster_id not in opened_entities:
                             opened_entities[cluster_id] = []
@@ -81,7 +82,7 @@ def get_conll_data(doc_id: str, tokenizer):
     return tokenized_text, torch.tensor(word_ids_to_num_bert_tokens), torch.tensor(doc_entities)
 
 
-def write_conll(doc_id, spans_starts, spans_ends, spans_clusters):
+def write_conll(doc_id: str, spans_starts, spans_ends, spans_clusters):
     single_word = defaultdict(lambda: [])
     starts = defaultdict(lambda: [])
     ends = defaultdict(lambda: [])
@@ -103,6 +104,7 @@ def write_conll(doc_id, spans_starts, spans_ends, spans_clusters):
             starts[start].append(cluster_num)
             ends[end].append(cluster_num)
 
+    print(doc_id)
     os.makedirs(config.CONLL_EVAL_OUTPUT_FOLDER, exist_ok=True)
     with open(config.CONLL_LITBANK_FOLDER + doc_id, mode='r', encoding='utf-8') as litbank_file, \
             open(config.CONLL_EVAL_OUTPUT_FOLDER + doc_id, mode='w', encoding='utf-8') as output_file:

@@ -6,10 +6,8 @@ import config
 
 
 class MentionsExtractorTrainer:
-    def __init__(self, encoder, tokenizer, bert_embedding_size):
-        self.encoder = encoder
-        self.tokenizer = tokenizer
-        self.extractor = mentions_extractor.MentionsExtractor(bert_embedding_size, config.TOP_SPAN_RATIO, config.MAX_SPAN_LENGTH).to(utils.device)
+    def __init__(self):
+        self.extractor = mentions_extractor.MentionsExtractor().to(utils.device)
         self.optim = torch.optim.Adam(
             self.extractor.parameters(), lr=config.MENTIONS_EXTRACTOR_LR
         )
@@ -60,7 +58,7 @@ class MentionsExtractorTrainer:
                 self.optim.zero_grad()
 
             # Run the mentions extractor
-            top_spans_start_indices, top_spans_end_indices, top_spans_scores = self.extractor(encoded_text)
+            top_spans_start_indices, top_spans_end_indices, top_spans_scores, _ = self.extractor(encoded_text)
 
             # Get the labels of the extracted spans
             labels = self.get_mentions_labels(true_entities, top_spans_start_indices, top_spans_end_indices).to(
@@ -80,11 +78,10 @@ class MentionsExtractorTrainer:
         # Return average loss of the training
         return total_loss / len(dataloader)
 
-    def train(self, train_dataloader, val_dataloader):
+    def train(self, train_dataloader, val_dataloader, model_save_path):
         best_validation_loss = float('inf')
 
         print('STARTING MENTIONS EXTRACTOR TRAINING')
-        print('------------------------------------')
 
         for epoch in range(config.MENTIONS_EXTRACTOR_EPOCHS):
             print('EPOCH {}:'.format(epoch + 1))
@@ -101,9 +98,8 @@ class MentionsExtractorTrainer:
             # Save the best model (in terms of validation loss)
             if validation_loss < best_validation_loss:
                 best_validation_loss = validation_loss
-                model_path = 'saved_models/my_models'
-                os.makedirs(model_path, exist_ok=True)
-                torch.save(self.extractor.state_dict(), model_path + '/mentions_extractor.pt')
+                os.makedirs(model_save_path, exist_ok=True)
+                torch.save(self.extractor.state_dict(), model_save_path + config.MENTIONS_EXTRACTOR_MODEL_NAME)
 
-        print('------------------------------------')
         print('MENTIONS EXTRACTOR TRAINING FINISHED')
+        print('------------------------------------')
