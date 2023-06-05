@@ -7,6 +7,7 @@ import conll
 import config
 import utils
 
+
 class CorefModel:
     def __init__(self):
         self.encoder = AutoModel.from_pretrained(config.SPANBERT_MODEL).to(utils.device)
@@ -136,7 +137,8 @@ class CorefModel:
         print('FULL MODEL TRAINING FINISHED')
         print('------------------------------------')
 
-    def evaluate(self, model_folder_path: str = config.PRETRAINED_MODELS_FOLDER):
+    @torch.no_grad()
+    def eval(self, model_folder_path: str = config.PRETRAINED_MODELS_FOLDER):
         # Prepare eval data
         test_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'test'), batch_size=1,
                                      shuffle=True)
