@@ -30,7 +30,7 @@ def clusterize_antecedents(
 ):
     k = pairs_score.size(0)
     best_antecedent = torch.argmax(pairs_score, 1)  # [k]
-    best_antecedent_pair = torch.stack([torch.tensor(range(k)), best_antecedent], 1).numpy()  # [k, 2]
+    best_antecedent_pair = torch.stack([torch.tensor(range(k)), best_antecedent.to('cpu')], 1).numpy()  # [k, 2]
     # Remove singleton mentions and mentions linked to dummy antecedent
     best_antecedent_pair = best_antecedent_pair[best_antecedent_pair[:, 1] != k]  # [num_spans_in_clusters, 2]
 

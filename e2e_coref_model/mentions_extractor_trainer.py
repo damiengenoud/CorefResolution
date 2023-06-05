@@ -69,8 +69,8 @@ class MentionsExtractorTrainer:
 
             if training:
                 loss.backward()
-                # Update the weights
                 self.optim.step()
+                # lr.step()
 
             # Add the loss of this document
             total_loss += loss.item()

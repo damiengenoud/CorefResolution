@@ -12,7 +12,7 @@ class CorefModel:
         self.encoder = AutoModel.from_pretrained(config.SPANBERT_MODEL).to(utils.device)
         self.tokenizer = AutoTokenizer.from_pretrained(config.SPANBERT_TOKENIZER)
 
-        self.linker = mentions_linker.MentionsLinker()
+        self.linker = mentions_linker.MentionsLinker().to(utils.device)
 
         self.optim = torch.optim.Adam(
             self.linker.parameters(), lr=config.MENTIONS_LINKER_LR
@@ -42,6 +42,7 @@ class CorefModel:
                    antecedents_mask  # [k, k]
                    ) -> torch.Tensor:
 
+        true_entities = true_entities.to(utils.device)
         predicted_indices = torch.stack([predicted_start_indices, predicted_end_indices], dim=1)  # [k]
         true_indices = true_entities[:, :2]  # [num_true_spans, 2]
         cluster_ids = true_entities[:, 2]  # [num_true_spans]
@@ -90,7 +91,7 @@ class CorefModel:
             if training:
                 loss.backward()
                 self.optim.step()
-                self.lr_scheduler.step()
+                # self.lr_scheduler.step()
 
             # Add the loss of this document
             total_loss += loss.item()
@@ -135,7 +136,7 @@ class CorefModel:
         print('FULL MODEL TRAINING FINISHED')
         print('------------------------------------')
 
-    def eval(self, model_folder_path: str = config.PRETRAINED_MODELS_FOLDER):
+    def evaluate(self, model_folder_path: str = config.PRETRAINED_MODELS_FOLDER):
         # Prepare eval data
         test_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'test'), batch_size=1,
                                      shuffle=True)
@@ -143,7 +144,7 @@ class CorefModel:
         print('STARTING MODEL EVALUATION')
 
         # Load linker
-        linker = mentions_linker.MentionsLinker()
+        linker = mentions_linker.MentionsLinker().to(utils.device)
         linker.load_state_dict(torch.load(model_folder_path + config.COREF_MODEL_NAME))
 
         # Iterate over all documents

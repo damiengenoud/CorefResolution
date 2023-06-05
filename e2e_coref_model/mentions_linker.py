@@ -14,12 +14,13 @@ class MentionsLinker(torch.nn.Module):
     def forward(self, encoded_text):
         # Get mentions from mentions extractor model:
         spans_start_indices, spans_end_indices, spans_mention_score, spans_embeddings = self.mentions_extractor(
-            encoded_text.to(utils.device))
+            encoded_text)
 
         num_spans = spans_mention_score.size(0)
+        num_antecedents = min(config.MAX_NUMBER_OF_ANTECEDENTS, num_spans)
 
         # Create a matrix containing the antecedents' indices of the top scoring spans
-        antecedents_distance = torch.tile(torch.arange(0, num_spans) + 1, [num_spans, 1])  # [num_spans ,num_spans]
+        antecedents_distance = torch.tile(torch.arange(0, num_antecedents) + 1, [num_spans, 1])  # [num_spans ,num_spans]
         raw_antecedents = torch.unsqueeze(torch.arange(num_spans), 1) - antecedents_distance  # [num_spans, num_spans]
 
         # Create a mask for out of bound indices (it's a lower triangular matrix)
@@ -44,8 +45,8 @@ class MentionsLinker(torch.nn.Module):
         antecedents_emb = spans_embeddings[antecedents]  # [num_spans, num_spans, emb]
 
         # Concatenate the targets embeddings, the antecedents embeddings and the multiplication of both
-        targets_embeddings = spans_embeddings.unsqueeze(1).tile([1, num_spans, 1])  # [num_spans, 1, emb]
-        mult_embeddings = targets_embeddings * spans_embeddings  # [num_spans, num_spans, emb]
+        targets_embeddings = spans_embeddings.unsqueeze(1).tile([1, num_antecedents, 1])  # [num_spans, 1, emb]
+        mult_embeddings = targets_embeddings * antecedents_emb  # [num_spans, num_spans, emb]
         pairs_embeddings = torch.cat([targets_embeddings, antecedents_emb, mult_embeddings],
                                      2)  # [num_spans, num_spans, 3*emb]
 

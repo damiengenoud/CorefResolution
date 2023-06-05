@@ -64,8 +64,8 @@ def write_conll(doc_id: str, spans_starts, spans_ends, spans_clusters):
 
     for cluster_num, cluster in enumerate(spans_clusters):
         for span_num in cluster:
-            start = starts[span_num]
-            end = ends[span_num]
+            start = spans_starts[span_num]
+            end = spans_ends[span_num]
             if start == end:
                 single_word[start].append(cluster_num)
             else:
