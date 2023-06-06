@@ -138,7 +138,7 @@ class CorefModel:
         print('------------------------------------')
 
     @torch.no_grad()
-    def eval(self, model_folder_path: str = config.PRETRAINED_MODELS_FOLDER):
+    def evaluate(self, model_folder_path: str = config.PRETRAINED_MODELS_FOLDER):
         # Prepare eval data
         test_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'test'), batch_size=1,
                                      shuffle=True)
