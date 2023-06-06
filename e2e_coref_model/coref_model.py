@@ -24,10 +24,10 @@ class CorefModel:
 
     @staticmethod
     def compute_loss(
-            all_pairs_scores,  # [k, k + 1]
-            antecedents_labels  # [k, k + 1]
+            all_pairs_scores,  # [k, num_antecedents + 1]
+            antecedents_labels  # [k, num_antecedents + 1]
     ):
-        true_pairs_score = all_pairs_scores + torch.log(antecedents_labels)  # [k, k + 1]
+        true_pairs_score = all_pairs_scores + torch.log(antecedents_labels)  # [k, num_antecedents + 1]
 
         log_sum_true_antecedents_score = torch.logsumexp(true_pairs_score, 1)  # [k]
         log_sum_all_antecedents_score = torch.logsumexp(all_pairs_scores, 1)  # [k]
@@ -39,8 +39,8 @@ class CorefModel:
     def get_labels(true_entities,  # [num_true_spans, 3]
                    predicted_start_indices,  # [k]
                    predicted_end_indices,  # [k]
-                   antecedents,  # [k, k]
-                   antecedents_mask  # [k, k]
+                   antecedents,  # [k, num_antecedents]
+                   antecedents_mask  # [k, num_antecedents]
                    ) -> torch.Tensor:
 
         true_entities = true_entities.to(utils.device)
@@ -57,14 +57,14 @@ class CorefModel:
         candidate_labels = torch.matmul(same_span.float(),
                                         torch.unsqueeze(cluster_ids, 1).float()).squeeze().long()  # [k]
 
-        antecedents_cluster = candidate_labels[antecedents] + torch.log(antecedents_mask.float())  # [k, k]
+        antecedents_cluster = candidate_labels[antecedents] + torch.log(antecedents_mask.float())  # [k, num_antecedents]
 
         antecedent_same_cluster = torch.logical_and(torch.eq(antecedents_cluster, candidate_labels.unsqueeze(1)),
                                                     antecedents_cluster > 0)  # [k, k]
         has_dummy_antecedent = torch.logical_not(antecedent_same_cluster.any(dim=1, keepdim=True))  # [k, 1]
-        antecedents_labels = torch.cat([antecedent_same_cluster, has_dummy_antecedent], 1).float()  # [k, k + 1]
+        antecedents_labels = torch.cat([antecedent_same_cluster, has_dummy_antecedent], 1).float()  # [k, num_antecedents + 1]
 
-        return antecedents_labels  # [k, k + 1]
+        return antecedents_labels  # [k, num_antecedents + 1]
 
     def one_pass(self, dataloader, training: bool):
         total_loss = 0
