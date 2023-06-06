@@ -58,14 +58,14 @@ class MentionsExtractorTrainer:
                 self.optim.zero_grad()
 
             # Run the mentions extractor
-            top_spans_start_indices, top_spans_end_indices, top_spans_scores, _ = self.extractor(encoded_text)
+            _, _, _, _, candidates_start_indices, candidates_end_indices, candidates_mentions_scores = self.extractor(encoded_text)
 
             # Get the labels of the extracted spans
-            labels = self.get_mentions_labels(true_entities, top_spans_start_indices, top_spans_end_indices).to(
+            labels = self.get_mentions_labels(true_entities, candidates_start_indices, candidates_end_indices).to(
                 utils.device)
 
             # Compute the loss
-            loss = self.compute_loss(top_spans_scores, labels)
+            loss = self.compute_loss(candidates_mentions_scores, labels)
 
             if training:
                 loss.backward()

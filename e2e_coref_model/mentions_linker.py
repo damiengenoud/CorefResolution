@@ -13,8 +13,12 @@ class MentionsLinker(torch.nn.Module):
 
     def forward(self, encoded_text):
         # Get mentions from mentions extractor model:
-        spans_start_indices, spans_end_indices, spans_mention_score, spans_embeddings = self.mentions_extractor(
+        spans_start_indices, spans_end_indices, spans_mention_score, spans_embeddings, _, _, _ = self.mentions_extractor(
             encoded_text)
+        
+        to_print = zip(spans_start_indices, spans_end_indices, spans_mention_score)
+        for element in to_print:
+            print(element)
 
         num_spans = spans_mention_score.size(0)
         num_antecedents = min(config.MAX_NUMBER_OF_ANTECEDENTS, num_spans)

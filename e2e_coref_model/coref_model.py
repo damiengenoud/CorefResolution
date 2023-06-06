@@ -18,7 +18,7 @@ class CorefModel:
         self.optim = torch.optim.Adam(
             self.linker.parameters(), lr=config.MENTIONS_LINKER_LR
         )
-        self.lr_scheduler = torch.optim.lr_scheduler.StepLR(  # not used for now
+        self.lr_scheduler = torch.optim.lr_scheduler.StepLR(
             self.optim, step_size=config.MENTIONS_LINKER_LR_DECAY_STEP, gamma=config.MENTIONS_LINKER_LR_DECAY
         )
 
@@ -42,29 +42,30 @@ class CorefModel:
                    antecedents,  # [k, num_antecedents]
                    antecedents_mask  # [k, num_antecedents]
                    ) -> torch.Tensor:
+        
+        with torch.no_grad():
+            true_entities = true_entities.to(utils.device)
+            predicted_indices = torch.stack([predicted_start_indices, predicted_end_indices], dim=1)  # [k]
+            true_indices = true_entities[:, :2]  # [num_true_spans, 2]
+            cluster_ids = true_entities[:, 2]  # [num_true_spans]
 
-        true_entities = true_entities.to(utils.device)
-        predicted_indices = torch.stack([predicted_start_indices, predicted_end_indices], dim=1)  # [k]
-        true_indices = true_entities[:, :2]  # [num_true_spans, 2]
-        cluster_ids = true_entities[:, 2]  # [num_true_spans]
+            predicted_expand = predicted_indices.unsqueeze(1).expand(-1, true_indices.shape[0],
+                                                                     predicted_indices.shape[1])  # [k, num_true_spans, 2]
+            true_expand = true_indices.unsqueeze(0).expand(predicted_indices.shape[0], -1,
+                                                           predicted_indices.shape[1])  # [k, num_true_spans, 2]
 
-        predicted_expand = predicted_indices.unsqueeze(1).expand(-1, true_indices.shape[0],
-                                                                 predicted_indices.shape[1])  # [k, num_true_spans, 2]
-        true_expand = true_indices.unsqueeze(0).expand(predicted_indices.shape[0], -1,
-                                                       predicted_indices.shape[1])  # [k, num_true_spans, 2]
+            same_span = (predicted_expand == true_expand).all(-1)  # [k, num_true_spans]
+            candidate_labels = torch.matmul(same_span.float(),
+                                            torch.unsqueeze(cluster_ids, 1).float()).squeeze().long()  # [k]
 
-        same_span = (predicted_expand == true_expand).all(-1)  # [k, num_true_spans]
-        candidate_labels = torch.matmul(same_span.float(),
-                                        torch.unsqueeze(cluster_ids, 1).float()).squeeze().long()  # [k]
+            antecedents_cluster = candidate_labels[antecedents] + torch.log(antecedents_mask.float())  # [k, num_antecedents]
 
-        antecedents_cluster = candidate_labels[antecedents] + torch.log(antecedents_mask.float())  # [k, num_antecedents]
+            antecedent_same_cluster = torch.logical_and(torch.eq(antecedents_cluster, candidate_labels.unsqueeze(1)),
+                                                        antecedents_cluster > 0)  # [k, k]
+            has_dummy_antecedent = torch.logical_not(antecedent_same_cluster.any(dim=1, keepdim=True))  # [k, 1]
+            antecedents_labels = torch.cat([antecedent_same_cluster, has_dummy_antecedent], 1).float()  # [k, num_antecedents + 1]
 
-        antecedent_same_cluster = torch.logical_and(torch.eq(antecedents_cluster, candidate_labels.unsqueeze(1)),
-                                                    antecedents_cluster > 0)  # [k, k]
-        has_dummy_antecedent = torch.logical_not(antecedent_same_cluster.any(dim=1, keepdim=True))  # [k, 1]
-        antecedents_labels = torch.cat([antecedent_same_cluster, has_dummy_antecedent], 1).float()  # [k, num_antecedents + 1]
-
-        return antecedents_labels  # [k, num_antecedents + 1]
+            return antecedents_labels  # [k, num_antecedents + 1]
 
     def one_pass(self, dataloader, training: bool):
         total_loss = 0
@@ -92,7 +93,7 @@ class CorefModel:
             if training:
                 loss.backward()
                 self.optim.step()
-                # self.lr_scheduler.step()
+                self.lr_scheduler.step()
 
             # Add the loss of this document
             total_loss += loss.item()
@@ -100,7 +101,7 @@ class CorefModel:
         # Return average loss of the training and
         return total_loss / len(dataloader)
 
-    def train(self, model_save_folder_path: str = config.MY_MODELS_FOLDER):
+    def train(self, require_extractor_training: bool = True, model_save_folder_path: str = config.MY_MODELS_FOLDER):
         # Prepare the dataset
         train_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'train'), batch_size=1,
                                       shuffle=True)
@@ -108,8 +109,11 @@ class CorefModel:
                                     shuffle=True)
 
         # Train the mentions extractor
-        extractor_trainer = mentions_extractor_trainer.MentionsExtractorTrainer()
-        extractor_trainer.train(train_dataloader, val_dataloader, model_save_folder_path)
+        if require_extractor_training:
+            extractor_trainer = mentions_extractor_trainer.MentionsExtractorTrainer()
+            extractor_trainer.train(train_dataloader, val_dataloader, model_save_folder_path)
+            torch.cuda.empty_cache()
+            del extractor_trainer 
 
         # Load trained mentions extractor in linker
         self.linker.load_extractor(model_save_folder_path)
@@ -157,10 +161,10 @@ class CorefModel:
             # Run the mentions linker
             spans_start_indices, spans_end_indices, pairs_scores, _, _ = linker(encoded_text)
 
-            # Clusterize the result
+            # Clusterize the result00
             clusters = utils.clusterize_antecedents(pairs_scores)
             
-            print(clusters)
+            # print(clusters)
 
             # Write the CONLL files for scorer
             conll.write_conll(data["doc_id"][0], spans_start_indices, spans_end_indices, clusters)
