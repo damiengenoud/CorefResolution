@@ -17,7 +17,6 @@ class MentionsExtractorTrainer:
 
     @staticmethod
     def compute_loss(
-            # [k], [k]
             scores, labels
     ):
         loss = torch.nn.BCEWithLogitsLoss(reduction='sum')
@@ -51,14 +50,16 @@ class MentionsExtractorTrainer:
         # Iterate over all training documents
         for data in dataloader:
             # Get encoded text and true entities
-            encoded_text = data["encoding"].squeeze().to(utils.device)
+            tokenized_text = data["tokenized_text"]
+            word_ids_to_num_bert_tokens = data["words_to_bert"]
             true_entities = data["doc_entities"].squeeze().to(utils.device)
 
             if training:
                 self.optim.zero_grad()
 
             # Run the mentions extractor
-            _, _, _, _, candidates_start_indices, candidates_end_indices, candidates_mentions_scores = self.extractor(encoded_text)
+            _, _, _, _, candidates_start_indices, candidates_end_indices, candidates_mentions_scores = self.extractor(
+                tokenized_text, word_ids_to_num_bert_tokens)
 
             # Get the labels of the extracted spans
             labels = self.get_mentions_labels(true_entities, candidates_start_indices, candidates_end_indices).to(
@@ -70,7 +71,6 @@ class MentionsExtractorTrainer:
             if training:
                 loss.backward()
                 self.optim.step()
-                # lr.step()
 
             # Add the loss of this document
             total_loss += loss.item()

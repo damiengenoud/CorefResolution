@@ -11,10 +11,10 @@ class MentionsLinker(torch.nn.Module):
         self.mentions_extractor = mentions_extractor.MentionsExtractor()
         self.pair_antecedent_score_model = ffnn.FFNN(3 * 3 * config.BERT_EMB_SIZE)
 
-    def forward(self, encoded_text):
+    def forward(self, tokenized_text, word_ids_to_num_bert_tokens):
         # Get mentions from mentions extractor model:
         spans_start_indices, spans_end_indices, spans_mention_score, spans_embeddings, _, _, _ = self.mentions_extractor(
-            encoded_text)
+            tokenized_text, word_ids_to_num_bert_tokens)
         
         to_print = zip(spans_start_indices, spans_end_indices, spans_mention_score)
         for element in to_print:

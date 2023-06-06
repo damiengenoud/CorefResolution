@@ -3,9 +3,11 @@ import re
 import os
 from collections import defaultdict
 import config
+from transformers import AutoTokenizer
 
 
-def get_conll_data(doc_id: str, tokenizer):
+def get_conll_data(doc_id: str):
+    tokenizer = AutoTokenizer.from_pretrained(config.SPANBERT_TOKENIZER)
     with open(config.CONLL_LITBANK_FOLDER + doc_id, mode='r', encoding='utf-8') as file:
         word_id = 0
         input_ids = torch.Tensor()

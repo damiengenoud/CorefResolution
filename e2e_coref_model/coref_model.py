@@ -1,4 +1,3 @@
-from transformers import AutoTokenizer, AutoModel
 import torch
 from torch.utils.data import DataLoader
 import mentions_extractor_trainer
@@ -10,9 +9,6 @@ import utils
 
 class CorefModel:
     def __init__(self):
-        self.encoder = AutoModel.from_pretrained(config.SPANBERT_MODEL)
-        self.tokenizer = AutoTokenizer.from_pretrained(config.SPANBERT_TOKENIZER)
-
         self.linker = mentions_linker.MentionsLinker().to(utils.device)
 
         self.optim = torch.optim.Adam(
@@ -72,8 +68,9 @@ class CorefModel:
 
         # Iterate over all training documents
         for data in dataloader:
-            # Get encoded text and true entities
-            encoded_text = data["encoding"].squeeze().to(utils.device)
+            # Get data
+            tokenized_text = data["tokenized_text"]
+            word_ids_to_num_bert_tokens = data["words_to_bert"]
             true_entities = data["doc_entities"].squeeze().to(utils.device)
 
             if training:
@@ -81,7 +78,7 @@ class CorefModel:
 
             # Run the mentions linker
             spans_start_indices, spans_end_indices, pairs_scores, antecedents, antecedents_mask = self.linker(
-                encoded_text)
+                tokenized_text, word_ids_to_num_bert_tokens)
 
             # Get the labels of the extracted spans
             labels = self.get_labels(true_entities, spans_start_indices, spans_end_indices, antecedents,
@@ -103,9 +100,9 @@ class CorefModel:
 
     def train(self, require_extractor_training: bool = True, model_save_folder_path: str = config.MY_MODELS_FOLDER):
         # Prepare the dataset
-        train_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'train'), batch_size=1,
+        train_dataloader = DataLoader(utils.get_dataset('train'), batch_size=1,
                                       shuffle=True)
-        val_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'val'), batch_size=1,
+        val_dataloader = DataLoader(utils.get_dataset('val'), batch_size=1,
                                     shuffle=True)
 
         # Train the mentions extractor
@@ -144,7 +141,7 @@ class CorefModel:
     @torch.no_grad()
     def evaluate(self, model_folder_path: str = config.PRETRAINED_MODELS_FOLDER):
         # Prepare eval data
-        test_dataloader = DataLoader(utils.get_dataset(self.tokenizer, self.encoder, 'test'), batch_size=1,
+        test_dataloader = DataLoader(utils.get_dataset('test'), batch_size=1,
                                      shuffle=True)
 
         print('STARTING MODEL EVALUATION')
@@ -155,16 +152,16 @@ class CorefModel:
 
         # Iterate over all documents
         for data in test_dataloader:
-            # Get encoded text and true entities
-            encoded_text = data["encoding"].squeeze().to(utils.device)
+            # Get data
+            tokenized_text = data["tokenized_text"]
+            word_ids_to_num_bert_tokens = data["words_to_bert"]
 
             # Run the mentions linker
-            spans_start_indices, spans_end_indices, pairs_scores, _, _ = linker(encoded_text)
+            spans_start_indices, spans_end_indices, pairs_scores, _, _ = linker(
+                tokenized_text, word_ids_to_num_bert_tokens)
 
             # Clusterize the result00
             clusters = utils.clusterize_antecedents(pairs_scores)
-            
-            # print(clusters)
 
             # Write the CONLL files for scorer
             conll.write_conll(data["doc_id"][0], spans_start_indices, spans_end_indices, clusters)

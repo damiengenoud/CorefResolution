@@ -1,13 +1,13 @@
 import torch
 import networkx as nx
 import custom_dataset
-import bert
 import conll
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu")
 
 
-def get_dataset(tokenizer, encoder, split):
+def get_dataset(split):
     with torch.no_grad():
         ids_folder_path = 'data'
         data_list = []
@@ -15,11 +15,10 @@ def get_dataset(tokenizer, encoder, split):
         with open(ids_folder_path + '/' + split + '.txt', mode='r', encoding='utf-8') as file:
             for line in file:
                 doc_id = line.rstrip()
-                tokenized_text, word_ids_to_num_bert_tokens, doc_entities = conll.get_conll_data(doc_id, tokenizer)
-                encoding = bert.spanbert_encode(tokenized_text, encoder)
-                averaged_encoding = bert.average_spanbert_subwords_tokens(encoding, word_ids_to_num_bert_tokens)
+                tokenized_text, word_ids_to_num_bert_tokens, doc_entities = conll.get_conll_data(doc_id)
                 data_list.append({'doc_id': doc_id,
-                                  'encoding': averaged_encoding.to("cpu"),
+                                  'tokenized_text': tokenized_text,
+                                  'words_to_bert': word_ids_to_num_bert_tokens,
                                   'doc_entities': doc_entities,
                                   })
         return custom_dataset.CustomDataset(data_list)
