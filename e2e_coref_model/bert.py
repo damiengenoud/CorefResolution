@@ -3,22 +3,16 @@ import utils
 
 
 def spanbert_encode(tokenized_text, encoder):
-
-    # config parameters
+    # Special values
     max_size = 512
     cls_token_id = 101
     sep_token_id = 102
-
-    # tokenize the text without special tokens, we will add them ourselves.
-    # tokenized_text = tokenizer.encode_plus(text, add_special_tokens=False, return_tensors='pt')
 
     # split the text in lists of less than 512 sub-words tokens (required for most BERT-like transformers),
     # that overlap each other. Here 510 to add 2 special tokens.
     window_size = max_size - 2
     stride = int((max_size - 2) / 2)
     size = tokenized_text['input_ids'].size(0)
-
-    # print("Number of sub-words tokens in input:" + str(len(tokenized_text['input_ids'])))
 
     split_ids = [tokenized_text['input_ids'][i:i + window_size] for i in range(0, size, stride)]
     split_masks = [tokenized_text['attention_mask'][i:i + window_size] for i in range(0, size, stride)]

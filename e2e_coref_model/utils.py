@@ -3,8 +3,7 @@ import networkx as nx
 import custom_dataset
 import conll
 
-# device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-device = torch.device("cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def get_dataset(split):
@@ -25,7 +24,7 @@ def get_dataset(split):
 
 
 def clusterize_antecedents(
-        pairs_score,  # [k, num_antecendents + 1]
+        pairs_score,  # [k, num_antecedents + 1]
 ):
     k = pairs_score.size(0)
     num_antecedents = pairs_score.size(1) - 1
