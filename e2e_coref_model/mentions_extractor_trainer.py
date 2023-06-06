@@ -51,8 +51,8 @@ class MentionsExtractorTrainer:
         # Iterate over all training documents
         for data in dataloader:
             # Get encoded text and true entities
-            encoded_text = data["encoding"].squeeze()
-            true_entities = data["doc_entities"].squeeze()
+            encoded_text = data["encoding"].squeeze().to(utils.device)
+            true_entities = data["doc_entities"].squeeze().to(utils.device)
 
             if training:
                 self.optim.zero_grad()

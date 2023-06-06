@@ -50,6 +50,7 @@ def spanbert_encode(tokenized_text, encoder):
         data_dict = {'input_ids': ids.long(), 'attention_mask': masks.int()}
 
         # get SpanBERT encoding
+        encoder = encoder.to(utils.device)
         spanbert_output = encoder(**data_dict).last_hidden_state  # float32 tensor
         spanbert_output_size = spanbert_output.size(dim=0)
 

@@ -10,7 +10,7 @@ import utils
 
 class CorefModel:
     def __init__(self):
-        self.encoder = AutoModel.from_pretrained(config.SPANBERT_MODEL).to(utils.device)
+        self.encoder = AutoModel.from_pretrained(config.SPANBERT_MODEL)
         self.tokenizer = AutoTokenizer.from_pretrained(config.SPANBERT_TOKENIZER)
 
         self.linker = mentions_linker.MentionsLinker().to(utils.device)
@@ -72,8 +72,8 @@ class CorefModel:
         # Iterate over all training documents
         for data in dataloader:
             # Get encoded text and true entities
-            encoded_text = data["encoding"].squeeze()
-            true_entities = data["doc_entities"].squeeze()
+            encoded_text = data["encoding"].squeeze().to(utils.device)
+            true_entities = data["doc_entities"].squeeze().to(utils.device)
 
             if training:
                 self.optim.zero_grad()
@@ -152,13 +152,15 @@ class CorefModel:
         # Iterate over all documents
         for data in test_dataloader:
             # Get encoded text and true entities
-            encoded_text = data["encoding"].squeeze()
+            encoded_text = data["encoding"].squeeze().to(utils.device)
 
             # Run the mentions linker
             spans_start_indices, spans_end_indices, pairs_scores, _, _ = linker(encoded_text)
 
             # Clusterize the result
             clusters = utils.clusterize_antecedents(pairs_scores)
+            
+            print(clusters)
 
             # Write the CONLL files for scorer
             conll.write_conll(data["doc_id"][0], spans_start_indices, spans_end_indices, clusters)

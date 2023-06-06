@@ -19,20 +19,23 @@ def get_dataset(tokenizer, encoder, split):
                 encoding = bert.spanbert_encode(tokenized_text, encoder)
                 averaged_encoding = bert.average_spanbert_subwords_tokens(encoding, word_ids_to_num_bert_tokens)
                 data_list.append({'doc_id': doc_id,
-                                  'encoding': averaged_encoding,
+                                  'encoding': averaged_encoding.to("cpu"),
                                   'doc_entities': doc_entities,
                                   })
         return custom_dataset.CustomDataset(data_list)
 
 
 def clusterize_antecedents(
-        pairs_score,  # [k, k + 1]
+        pairs_score,  # [k, num_antecendents + 1]
 ):
     k = pairs_score.size(0)
+    num_antecedents = pairs_score.size(1) - 1
+    
     best_antecedent = torch.argmax(pairs_score, 1)  # [k]
+    print(pairs_score)
     best_antecedent_pair = torch.stack([torch.tensor(range(k)), best_antecedent.to('cpu')], 1).numpy()  # [k, 2]
     # Remove singleton mentions and mentions linked to dummy antecedent
-    best_antecedent_pair = best_antecedent_pair[best_antecedent_pair[:, 1] != k]  # [num_spans_in_clusters, 2]
+    best_antecedent_pair = best_antecedent_pair[best_antecedent_pair[:, 1] != num_antecedents]  # [num_spans_in_clusters, 2]
 
     # Use graph algorithm to cluster the pairs of mentions-antecedents
     clusters = []
