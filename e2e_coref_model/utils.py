@@ -3,14 +3,17 @@ import networkx as nx
 import custom_dataset
 import conll
 import config
-from transformers import AutoTokenizer
+import utils
+import bert
+from transformers import AutoTokenizer, AutoModel
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def get_dataset(split):
     with torch.no_grad():
-        tokenizer = AutoTokenizer.from_pretrained(config.SPANBERT_TOKENIZER)
+        tokenizer = AutoTokenizer.from_pretrained(config.SPANBERT_TOKENIZER, use_fast=False)
+        encoder = AutoModel.from_pretrained(config.SPANBERT_MODEL).to(utils.device)
         ids_folder_path = 'data'
         data_list = []
         print("Preparing " + split + " documents...")
@@ -18,9 +21,10 @@ def get_dataset(split):
             for line in file:
                 doc_id = line.rstrip()
                 tokenized_text, word_ids_to_num_bert_tokens, doc_entities = conll.get_conll_data(doc_id, tokenizer)
+                encoded_text = bert.spanbert_encode(tokenized_text, encoder)
+                encoded_text = bert.average_spanbert_subwords_tokens(encoded_text, word_ids_to_num_bert_tokens)
                 data_list.append({'doc_id': doc_id,
-                                  'tokenized_text': tokenized_text,
-                                  'word_ids_to_num_bert_tokens': word_ids_to_num_bert_tokens,
+                                  'encoding': encoded_text,
                                   'doc_entities': doc_entities
                                   })
         return custom_dataset.CustomDataset(data_list)

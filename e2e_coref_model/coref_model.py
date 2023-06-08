@@ -11,8 +11,6 @@ class CorefModel:
     def __init__(self):
         self.linker = mentions_linker.MentionsLinker().to(utils.device)
         self.optim = torch.optim.Adam(self.linker.parameters(), lr=config.MENTIONS_LINKER_LR)
-        self.lr_scheduler = torch.optim.lr_scheduler.StepLR(
-            self.optim, step_size=config.MENTIONS_LINKER_LR_DECAY_STEP, gamma=config.MENTIONS_LINKER_LR_DECAY)
 
     @staticmethod
     def compute_loss(
@@ -66,8 +64,7 @@ class CorefModel:
         # Iterate over all training documents
         for data in dataloader:
             # Get data
-            tokenized_text = data['tokenized_text']
-            word_ids_to_num_bert_tokens = data['word_ids_to_num_bert_tokens'].squeeze()
+            encoded_text = data['encoding'].squeeze()
             true_entities = data['doc_entities'].squeeze()
 
             if training:
@@ -75,7 +72,7 @@ class CorefModel:
 
             # Run the mentions linker
             spans_start_indices, spans_end_indices, pairs_scores, antecedents, antecedents_mask = self.linker(
-                tokenized_text, word_ids_to_num_bert_tokens)
+                encoded_text)
 
             # Get the labels of the extracted spans
             labels = self.get_labels(true_entities, spans_start_indices, spans_end_indices, antecedents,
@@ -87,7 +84,6 @@ class CorefModel:
             if training:
                 loss.backward()
                 self.optim.step()
-                self.lr_scheduler.step()
 
             # Add the loss of this document
             total_loss += loss.item()
@@ -95,7 +91,7 @@ class CorefModel:
         # Return average loss of the training and
         return total_loss / len(dataloader)
 
-    def train(self, require_extractor_training: bool = True, model_save_folder_path: str = config.MY_MODELS_FOLDER):
+    def train(self, require_extractor_training: bool = True, extractor_folder_path: str = config.MY_MODELS_FOLDER):
         # Prepare the dataset
         train_dataloader = DataLoader(utils.get_dataset('train'), batch_size=1,
                                       shuffle=True)
@@ -105,12 +101,12 @@ class CorefModel:
         # Train the mentions extractor
         if require_extractor_training:
             extractor_trainer = mentions_extractor_trainer.MentionsExtractorTrainer()
-            extractor_trainer.train(train_dataloader, val_dataloader, model_save_folder_path)
+            extractor_trainer.train(train_dataloader, val_dataloader)
             del extractor_trainer 
             torch.cuda.empty_cache()
             
         # Load trained mentions extractor in linker
-        self.linker.load_extractor(model_save_folder_path)
+        self.linker.load_extractor(extractor_folder_path)
 
         print('STARTING FULL MODEL TRAINING')
         best_validation_loss = float('inf')
@@ -130,7 +126,7 @@ class CorefModel:
             # Save the best model (in terms of validation loss)
             if validation_loss < best_validation_loss:
                 best_validation_loss = validation_loss
-                torch.save(self.linker.state_dict(), model_save_folder_path + config.COREF_MODEL_NAME)
+                torch.save(self.linker.state_dict(), config.MY_MODELS_FOLDER + config.COREF_MODEL_NAME)
 
         print('FULL MODEL TRAINING FINISHED')
         print('------------------------------------')
@@ -145,24 +141,28 @@ class CorefModel:
         self.linker.load_state_dict(torch.load(model_folder_path + config.COREF_MODEL_NAME))
         
         print('STARTING MODEL EVALUATION')
-  
+        
+        total_f1 = 0
         # Iterate over all documents
         for data in test_dataloader:
             # Get data
-            tokenized_text = data['tokenized_text']
-            word_ids_to_num_bert_tokens = data['word_ids_to_num_bert_tokens'].squeeze()
+            doc_id = data['doc_id'][0]
+            encoded_text = data['encoding'].squeeze()
+            print(doc_id)
             
             # Run the mentions linker
             spans_start_indices, spans_end_indices, pairs_scores, _, _ = self.linker(
-                tokenized_text, word_ids_to_num_bert_tokens)
+                encoded_text)
 
-            # Clusterize the result00
+            # Clusterize the result
             clusters = utils.clusterize_antecedents(pairs_scores)
 
             # Write the CONLL files for scorer
-            conll.write_conll(data['doc_id'].squeeze(), spans_start_indices, spans_end_indices, clusters)
+            conll.write_conll(doc_id, spans_start_indices, spans_end_indices, clusters)
 
-            # TODO add scorer call, does not work on windows...
+            # Get the F1 score for the document and add to the total
+            total_f1 += conll.compute_conll_score(doc_id)
 
-        print('------------------------------------')
         print('MODEL EVALUATION FINISHED')
+        f1 = total_f1/len(test_dataloader)
+        print('F1 SCORE: ' + str(f1))

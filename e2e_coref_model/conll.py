@@ -3,7 +3,7 @@ import re
 import os
 from collections import defaultdict
 import config
-
+import subprocess
 
 def get_conll_data(doc_id: str, tokenizer):
     with open(config.CONLL_LITBANK_FOLDER + doc_id, mode='r', encoding='utf-8') as file:
@@ -65,22 +65,14 @@ def write_conll(doc_id: str, spans_starts, spans_ends, spans_clusters):
 
     for cluster_num, cluster in enumerate(spans_clusters):
         for span_num in cluster:
-            start = spans_starts[span_num]
-            end = spans_ends[span_num]
+            start = spans_starts[span_num].item()
+            end = spans_ends[span_num].item()
             if start == end:
                 single_word[start].append(cluster_num)
             else:
                 starts[start].append(cluster_num)
                 ends[end].append(cluster_num)
 
-    for start, end, cluster_num in zip(spans_starts, spans_ends, spans_clusters):
-        if start == end:
-            single_word[start].append(cluster_num)
-        else:
-            starts[start].append(cluster_num)
-            ends[end].append(cluster_num)
-
-    print(doc_id)
     os.makedirs(config.CONLL_EVAL_OUTPUT_FOLDER, exist_ok=True)
     with open(config.CONLL_LITBANK_FOLDER + doc_id, mode='r', encoding='utf-8') as litbank_file, \
             open(config.CONLL_EVAL_OUTPUT_FOLDER + doc_id, mode='w', encoding='utf-8') as output_file:
@@ -109,3 +101,18 @@ def write_conll(doc_id: str, spans_starts, spans_ends, spans_clusters):
                 output_file.write(output_line + '\n')
 
                 word_id += 1
+
+def compute_conll_score(doc_id):
+    true = config.CONLL_LITBANK_FOLDER + doc_id
+    predicted = config.CONLL_EVAL_OUTPUT_FOLDER + doc_id
+    metrics = ["muc", "ceafe", "bcub"]
+    doc_f1_sum = 0
+    for metric in metrics:
+        x = subprocess.run(args=["perl", "reference-coreference-scorers/scorer.pl"] + [metric] + [true, predicted], capture_output=True, check=True, text=True)
+        prev_line = ""
+        curr_line = ""
+        for line in str(x.stdout).splitlines():
+            prev_line = curr_line
+            curr_line = line
+        doc_f1_sum += float(re.search(r"F1:\s*([0-9.]+)%", prev_line).group(1))
+    return doc_f1_sum/len(metrics)

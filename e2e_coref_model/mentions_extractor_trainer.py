@@ -8,9 +8,7 @@ import config
 class MentionsExtractorTrainer:
     def __init__(self):
         self.extractor = mentions_extractor.MentionsExtractor().to(utils.device)
-        self.optim = torch.optim.SGD(self.extractor.parameters(), lr=config.MENTIONS_EXTRACTOR_LR)
-        self.lr_scheduler = torch.optim.lr_scheduler.StepLR(
-            self.optim, step_size=config.MENTIONS_EXTRACTOR_LR_DECAY_STEP, gamma=config.MENTIONS_EXTRACTOR_LR_DECAY)
+        self.optim = torch.optim.Adam(self.extractor.parameters(), lr=config.MENTIONS_EXTRACTOR_LR)
 
     @staticmethod
     def compute_loss(
@@ -48,15 +46,14 @@ class MentionsExtractorTrainer:
         # Iterate over all training documents
         for data in dataloader:
             # Get data
-            tokenized_text = data['tokenized_text']
-            word_ids_to_num_bert_tokens = data['word_ids_to_num_bert_tokens'].squeeze()
+            encoded_text = data['encoding'].squeeze()
             true_entities = data['doc_entities'].squeeze()
 
             if training:
                 self.optim.zero_grad()
 
             # Run the mentions extractor
-            top_spans_start_indices, top_spans_end_indices, top_spans_scores, _ = self.extractor(tokenized_text, word_ids_to_num_bert_tokens)
+            top_spans_start_indices, top_spans_end_indices, top_spans_scores, _ = self.extractor(encoded_text)
 
             # Get the labels of the extracted spans
             labels = self.get_mentions_labels(true_entities, top_spans_start_indices, top_spans_end_indices)
@@ -67,7 +64,6 @@ class MentionsExtractorTrainer:
             if training:
                 loss.backward()
                 self.optim.step()
-                self.lr_scheduler.step()
 
             # Add the loss of this document
             total_loss += loss.item()
@@ -75,7 +71,7 @@ class MentionsExtractorTrainer:
         # Return average loss of the training
         return total_loss / len(dataloader)
 
-    def train(self, train_dataloader, val_dataloader, model_save_path):
+    def train(self, train_dataloader, val_dataloader):
         self.extractor.eval()
         best_validation_loss = float('inf')
 
@@ -97,7 +93,7 @@ class MentionsExtractorTrainer:
             if validation_loss < best_validation_loss:
                 best_validation_loss = validation_loss
                 os.makedirs(model_save_path, exist_ok=True)
-                torch.save(self.extractor.state_dict(), model_save_path + config.MENTIONS_EXTRACTOR_MODEL_NAME)
+                torch.save(self.extractor.state_dict(), config.MY_MODELS_FOLDER + config.MENTIONS_EXTRACTOR_MODEL_NAME)
 
         print('MENTIONS EXTRACTOR TRAINING FINISHED')
         print('------------------------------------')

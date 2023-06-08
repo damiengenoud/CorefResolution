@@ -12,10 +12,11 @@ def spanbert_encode(tokenized_text, encoder):
     # that overlap each other. Here 510 to add 2 special tokens.
     window_size = max_size - 2
     stride = int((max_size - 2) / 2)
-    size = tokenized_text['input_ids'].squeeze().size(0)
-
-    input_ids = tokenized_text['input_ids'].squeeze()
-    attention_mask = tokenized_text['attention_mask'].squeeze()
+    
+    input_ids = tokenized_text['input_ids']
+    attention_mask = tokenized_text['attention_mask']
+    
+    size = input_ids.size(0)
     
     split_ids = [input_ids[i:i + window_size] for i in range(0, size, stride)]
     split_masks = [attention_mask[i:i + window_size] for i in range(0, size, stride)]

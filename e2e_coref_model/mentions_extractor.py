@@ -9,13 +9,10 @@ from transformers import AutoModel
 class MentionsExtractor(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        self.encoder = AutoModel.from_pretrained(config.SPANBERT_MODEL).to(utils.device)
         self.span_representation_model = span_attention_embedder.SpanAttentionEmbedder(config.BERT_EMB_SIZE)
         self.span_score_model = ffnn.FFNN(3 * config.BERT_EMB_SIZE)
 
-    def forward(self, tokenized_text, word_ids_to_num_bert_tokens):
-        encoded_text = bert.spanbert_encode(tokenized_text, self.encoder)
-        encoded_text = bert.average_spanbert_subwords_tokens(encoded_text, word_ids_to_num_bert_tokens)
+    def forward(self, encoded_text):
         num_tokens = encoded_text.size(0)
         
         # Get all possible start and end indices of the spans up to length max_span_width
