@@ -6,10 +6,11 @@ import conll
 import config
 import utils
 
+
 class CorefModel:
     def __init__(self):
         self.linker = mentions_linker.MentionsLinker().to(utils.device)
-        self.optim = torch.optim.Adam(self.linker.parameters() , lr=config.MENTIONS_LINKER_LR)
+        self.optim = torch.optim.Adam(self.linker.parameters(), lr=config.MENTIONS_LINKER_LR)
         self.lr_scheduler = torch.optim.lr_scheduler.StepLR(
             self.optim, step_size=config.MENTIONS_LINKER_LR_DECAY_STEP, gamma=config.MENTIONS_LINKER_LR_DECAY)
 
@@ -152,7 +153,7 @@ class CorefModel:
             word_ids_to_num_bert_tokens = data['word_ids_to_num_bert_tokens'].squeeze()
             
             # Run the mentions linker
-            spans_start_indices, spans_end_indices, pairs_scores, _, _ = linker(
+            spans_start_indices, spans_end_indices, pairs_scores, _, _ = self.linker(
                 tokenized_text, word_ids_to_num_bert_tokens)
 
             # Clusterize the result00

@@ -2,7 +2,6 @@ import torch
 import networkx as nx
 import custom_dataset
 import conll
-import bert
 import config
 from transformers import AutoTokenizer
 
