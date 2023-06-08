@@ -3,11 +3,9 @@ import re
 import os
 from collections import defaultdict
 import config
-from transformers import AutoTokenizer
 
 
-def get_conll_data(doc_id: str):
-    tokenizer = AutoTokenizer.from_pretrained(config.SPANBERT_TOKENIZER)
+def get_conll_data(doc_id: str, tokenizer):
     with open(config.CONLL_LITBANK_FOLDER + doc_id, mode='r', encoding='utf-8') as file:
         word_id = 0
         input_ids = torch.Tensor()
@@ -52,10 +50,11 @@ def get_conll_data(doc_id: str):
                         # Close and add entity to entities list
                         doc_entities.append([opened_entities[cluster_id].pop(), word_id, cluster_id])
                 word_id += 1
-
+                
     tokenized_text = {'input_ids': input_ids,
                       'token_type_ids': torch.tensor([0] * input_ids.size(0)),
                       'attention_mask': torch.tensor([1] * input_ids.size(0))}
+    
     return tokenized_text, torch.tensor(word_ids_to_num_bert_tokens), torch.tensor(doc_entities)
 
 

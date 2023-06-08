@@ -2,23 +2,27 @@ import torch
 import networkx as nx
 import custom_dataset
 import conll
+import bert
+import config
+from transformers import AutoTokenizer
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def get_dataset(split):
     with torch.no_grad():
+        tokenizer = AutoTokenizer.from_pretrained(config.SPANBERT_TOKENIZER)
         ids_folder_path = 'data'
         data_list = []
         print("Preparing " + split + " documents...")
         with open(ids_folder_path + '/' + split + '.txt', mode='r', encoding='utf-8') as file:
             for line in file:
                 doc_id = line.rstrip()
-                tokenized_text, word_ids_to_num_bert_tokens, doc_entities = conll.get_conll_data(doc_id)
+                tokenized_text, word_ids_to_num_bert_tokens, doc_entities = conll.get_conll_data(doc_id, tokenizer)
                 data_list.append({'doc_id': doc_id,
                                   'tokenized_text': tokenized_text,
-                                  'words_to_bert': word_ids_to_num_bert_tokens,
-                                  'doc_entities': doc_entities,
+                                  'word_ids_to_num_bert_tokens': word_ids_to_num_bert_tokens,
+                                  'doc_entities': doc_entities
                                   })
         return custom_dataset.CustomDataset(data_list)
 

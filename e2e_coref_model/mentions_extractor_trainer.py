@@ -8,17 +8,15 @@ import config
 class MentionsExtractorTrainer:
     def __init__(self):
         self.extractor = mentions_extractor.MentionsExtractor().to(utils.device)
-        self.optim = torch.optim.Adam(
-            self.extractor.parameters(), lr=config.MENTIONS_EXTRACTOR_LR
-        )
-        self.lr_scheduler = torch.optim.lr_scheduler.StepLR(  # not used for now
-            self.optim, step_size=config.MENTIONS_EXTRACTOR_LR_DECAY_STEP, gamma=config.MENTIONS_EXTRACTOR_LR_DECAY
-        )
+        self.optim = torch.optim.SGD(self.extractor.parameters(), lr=config.MENTIONS_EXTRACTOR_LR)
+        self.lr_scheduler = torch.optim.lr_scheduler.StepLR(
+            self.optim, step_size=config.MENTIONS_EXTRACTOR_LR_DECAY_STEP, gamma=config.MENTIONS_EXTRACTOR_LR_DECAY)
 
     @staticmethod
     def compute_loss(
             scores, labels
     ):
+        labels = labels.to(utils.device)
         loss = torch.nn.BCEWithLogitsLoss(reduction='sum')
         return loss(scores, labels)
 
@@ -27,18 +25,18 @@ class MentionsExtractorTrainer:
             true_entities: torch.Tensor,  # [num_true_mentions, 3]
             predicted_start_indices: torch.Tensor,  # [num_predicted_spans]
             predicted_end_indices: torch.Tensor  # [num_predicted_spans]
-    ) -> torch.Tensor:
+    ):
         with torch.no_grad():
-            predicted_indices = torch.stack([predicted_start_indices, predicted_end_indices], dim=1)
+            true_entities = true_entities.to(utils.device)
             true_indices = true_entities[:, :2]
+            predicted_indices = torch.stack([predicted_start_indices, predicted_end_indices], dim=1)
             # Expands the tensors to be able to use a sort of "contains" function, see :
             # https://stackoverflow.com/questions/73524338/pytorch-test-each-row-of-the-first-2d-tensor-also-exist-in-the-second-tensor
             predicted_expand = predicted_indices.unsqueeze(1).expand(-1, true_indices.shape[0],
                                                                      predicted_indices.shape[1])
             true_expand = true_indices.unsqueeze(0).expand(predicted_indices.shape[0], -1,
                                                            predicted_indices.shape[1]).to(
-                utils.device
-            )
+                utils.device)
 
             # Similar to a "contains" function
             labels = (predicted_expand == true_expand).all(-1).any(-1).float()  # [num_predicted_spans]
@@ -49,28 +47,27 @@ class MentionsExtractorTrainer:
 
         # Iterate over all training documents
         for data in dataloader:
-            # Get encoded text and true entities
-            tokenized_text = data["tokenized_text"]
-            word_ids_to_num_bert_tokens = data["words_to_bert"]
-            true_entities = data["doc_entities"].squeeze().to(utils.device)
+            # Get data
+            tokenized_text = data['tokenized_text']
+            word_ids_to_num_bert_tokens = data['word_ids_to_num_bert_tokens'].squeeze()
+            true_entities = data['doc_entities'].squeeze()
 
             if training:
                 self.optim.zero_grad()
 
             # Run the mentions extractor
-            _, _, _, _, candidates_start_indices, candidates_end_indices, candidates_mentions_scores = self.extractor(
-                tokenized_text, word_ids_to_num_bert_tokens)
+            top_spans_start_indices, top_spans_end_indices, top_spans_scores, _ = self.extractor(tokenized_text, word_ids_to_num_bert_tokens)
 
             # Get the labels of the extracted spans
-            labels = self.get_mentions_labels(true_entities, candidates_start_indices, candidates_end_indices).to(
-                utils.device)
+            labels = self.get_mentions_labels(true_entities, top_spans_start_indices, top_spans_end_indices)
 
             # Compute the loss
-            loss = self.compute_loss(candidates_mentions_scores, labels)
+            loss = self.compute_loss(top_spans_scores, labels)
 
             if training:
                 loss.backward()
                 self.optim.step()
+                self.lr_scheduler.step()
 
             # Add the loss of this document
             total_loss += loss.item()
@@ -79,6 +76,7 @@ class MentionsExtractorTrainer:
         return total_loss / len(dataloader)
 
     def train(self, train_dataloader, val_dataloader, model_save_path):
+        self.extractor.eval()
         best_validation_loss = float('inf')
 
         print('STARTING MENTIONS EXTRACTOR TRAINING')

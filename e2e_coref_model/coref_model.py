@@ -6,23 +6,19 @@ import conll
 import config
 import utils
 
-
 class CorefModel:
     def __init__(self):
         self.linker = mentions_linker.MentionsLinker().to(utils.device)
-
-        self.optim = torch.optim.Adam(
-            self.linker.parameters(), lr=config.MENTIONS_LINKER_LR
-        )
+        self.optim = torch.optim.Adam(self.linker.parameters() , lr=config.MENTIONS_LINKER_LR)
         self.lr_scheduler = torch.optim.lr_scheduler.StepLR(
-            self.optim, step_size=config.MENTIONS_LINKER_LR_DECAY_STEP, gamma=config.MENTIONS_LINKER_LR_DECAY
-        )
+            self.optim, step_size=config.MENTIONS_LINKER_LR_DECAY_STEP, gamma=config.MENTIONS_LINKER_LR_DECAY)
 
     @staticmethod
     def compute_loss(
             all_pairs_scores,  # [k, num_antecedents + 1]
             antecedents_labels  # [k, num_antecedents + 1]
     ):
+        antecedents_labels = antecedents_labels.to(utils.device)
         true_pairs_score = all_pairs_scores + torch.log(antecedents_labels)  # [k, num_antecedents + 1]
 
         log_sum_true_antecedents_score = torch.logsumexp(true_pairs_score, 1)  # [k]
@@ -41,8 +37,8 @@ class CorefModel:
         
         with torch.no_grad():
             true_entities = true_entities.to(utils.device)
-            predicted_indices = torch.stack([predicted_start_indices, predicted_end_indices], dim=1)  # [k]
             true_indices = true_entities[:, :2]  # [num_true_spans, 2]
+            predicted_indices = torch.stack([predicted_start_indices, predicted_end_indices], dim=1)  # [k]
             cluster_ids = true_entities[:, 2]  # [num_true_spans]
 
             predicted_expand = predicted_indices.unsqueeze(1).expand(-1, true_indices.shape[0],
@@ -69,9 +65,9 @@ class CorefModel:
         # Iterate over all training documents
         for data in dataloader:
             # Get data
-            tokenized_text = data["tokenized_text"]
-            word_ids_to_num_bert_tokens = data["words_to_bert"]
-            true_entities = data["doc_entities"].squeeze().to(utils.device)
+            tokenized_text = data['tokenized_text']
+            word_ids_to_num_bert_tokens = data['word_ids_to_num_bert_tokens'].squeeze()
+            true_entities = data['doc_entities'].squeeze()
 
             if training:
                 self.optim.zero_grad()
@@ -82,7 +78,7 @@ class CorefModel:
 
             # Get the labels of the extracted spans
             labels = self.get_labels(true_entities, spans_start_indices, spans_end_indices, antecedents,
-                                     antecedents_mask).to(utils.device)
+                                     antecedents_mask)
 
             # Compute the loss
             loss = self.compute_loss(pairs_scores, labels)
@@ -109,9 +105,9 @@ class CorefModel:
         if require_extractor_training:
             extractor_trainer = mentions_extractor_trainer.MentionsExtractorTrainer()
             extractor_trainer.train(train_dataloader, val_dataloader, model_save_folder_path)
-            torch.cuda.empty_cache()
             del extractor_trainer 
-
+            torch.cuda.empty_cache()
+            
         # Load trained mentions extractor in linker
         self.linker.load_extractor(model_save_folder_path)
 
@@ -144,18 +140,17 @@ class CorefModel:
         test_dataloader = DataLoader(utils.get_dataset('test'), batch_size=1,
                                      shuffle=True)
 
-        print('STARTING MODEL EVALUATION')
-
         # Load linker
-        linker = mentions_linker.MentionsLinker().to(utils.device)
-        linker.load_state_dict(torch.load(model_folder_path + config.COREF_MODEL_NAME))
-
+        self.linker.load_state_dict(torch.load(model_folder_path + config.COREF_MODEL_NAME))
+        
+        print('STARTING MODEL EVALUATION')
+  
         # Iterate over all documents
         for data in test_dataloader:
             # Get data
-            tokenized_text = data["tokenized_text"]
-            word_ids_to_num_bert_tokens = data["words_to_bert"]
-
+            tokenized_text = data['tokenized_text']
+            word_ids_to_num_bert_tokens = data['word_ids_to_num_bert_tokens'].squeeze()
+            
             # Run the mentions linker
             spans_start_indices, spans_end_indices, pairs_scores, _, _ = linker(
                 tokenized_text, word_ids_to_num_bert_tokens)
@@ -164,7 +159,7 @@ class CorefModel:
             clusters = utils.clusterize_antecedents(pairs_scores)
 
             # Write the CONLL files for scorer
-            conll.write_conll(data["doc_id"][0], spans_start_indices, spans_end_indices, clusters)
+            conll.write_conll(data['doc_id'].squeeze(), spans_start_indices, spans_end_indices, clusters)
 
             # TODO add scorer call, does not work on windows...
 

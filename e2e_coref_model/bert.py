@@ -12,10 +12,13 @@ def spanbert_encode(tokenized_text, encoder):
     # that overlap each other. Here 510 to add 2 special tokens.
     window_size = max_size - 2
     stride = int((max_size - 2) / 2)
-    size = tokenized_text['input_ids'].size(0)
+    size = tokenized_text['input_ids'].squeeze().size(0)
 
-    split_ids = [tokenized_text['input_ids'][i:i + window_size] for i in range(0, size, stride)]
-    split_masks = [tokenized_text['attention_mask'][i:i + window_size] for i in range(0, size, stride)]
+    input_ids = tokenized_text['input_ids'].squeeze()
+    attention_mask = tokenized_text['attention_mask'].squeeze()
+    
+    split_ids = [input_ids[i:i + window_size] for i in range(0, size, stride)]
+    split_masks = [attention_mask[i:i + window_size] for i in range(0, size, stride)]
 
     # remove last chunk if multiple chunks exist
     last_chunk_size = len(split_ids[len(split_ids) - 1])
@@ -44,7 +47,6 @@ def spanbert_encode(tokenized_text, encoder):
     data_dict = {'input_ids': ids.long(), 'attention_mask': masks.int()}
 
     # get SpanBERT encoding
-    encoder = encoder.to(utils.device)
     spanbert_output = encoder(**data_dict).last_hidden_state  # float32 tensor
     spanbert_output_size = spanbert_output.size(dim=0)
 
