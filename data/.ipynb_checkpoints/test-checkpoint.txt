@@ -1,0 +1,10 @@
+6593_history_of_tom_jones_a_foundling_brat.conll
+271_black_beauty_brat.conll
+730_oliver_twist_brat.conll
+16357_mary_a_fiction_brat.conll
+2807_to_have_and_to_hold_brat.conll
+1023_bleak_house_brat.conll
+1155_the_secret_adversary_brat.conll
+238_dear_enemy_brat.conll
+1661_the_adventures_of_sherlock_holmes_brat.conll
+711_allan_quatermain_brat.conll
