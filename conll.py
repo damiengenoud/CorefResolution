@@ -102,11 +102,10 @@ def write_conll(doc_id: str, spans_starts, spans_ends, spans_clusters):
 
                 word_id += 1
 
-def compute_conll_score(doc_id):
+def compute_conll_score(doc_id, metrics):
     true = config.CONLL_LITBANK_FOLDER + doc_id
     predicted = config.CONLL_EVAL_OUTPUT_FOLDER + doc_id
-    metrics = ["muc", "ceafe", "bcub"]
-    doc_f1_sum = 0
+    doc_f1 = {}
     for metric in metrics:
         x = subprocess.run(args=["perl", "reference-coreference-scorers/scorer.pl"] + [metric] + [true, predicted], capture_output=True, check=True, text=True)
         prev_line = ""
@@ -114,5 +113,5 @@ def compute_conll_score(doc_id):
         for line in str(x.stdout).splitlines():
             prev_line = curr_line
             curr_line = line
-        doc_f1_sum += float(re.search(r"F1:\s*([0-9.]+)%", prev_line).group(1))
-    return doc_f1_sum/len(metrics)
+        doc_f1[metric] = float(re.search(r"F1:\s*([0-9.]+)%", prev_line).group(1))
+    return doc_f1

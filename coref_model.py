@@ -141,8 +141,10 @@ class CorefModel:
         self.linker.load_state_dict(torch.load(model_folder_path + config.COREF_MODEL_NAME))
         
         print('STARTING MODEL EVALUATION')
-        
-        total_f1 = 0
+        total_muc_f1 = 0
+        total_b3_f1 = 0
+        total_ceafe_f1 = 0
+        total_average_f1 = 0
         # Iterate over all documents
         for data in test_dataloader:
             # Get data
@@ -161,8 +163,19 @@ class CorefModel:
             conll.write_conll(doc_id, spans_start_indices, spans_end_indices, clusters)
 
             # Get the F1 score for the document and add to the total
-            total_f1 += conll.compute_conll_score(doc_id)
+            metrics = ["muc", "ceafe", "bcub"]
+            doc_f1 = conll.compute_conll_score(doc_id, metrics)
+            total_muc_f1 += doc_f1["muc"]
+            total_b3_f1 += doc_f1["bcub"]
+            total_ceafe_f1 += doc_f1["ceafe"]
 
         print('MODEL EVALUATION FINISHED')
-        f1 = total_f1/len(test_dataloader)
-        print('F1 SCORE: ' + str(f1))
+        print('------------------------------------')
+        muc_f1 = total_muc_f1 / len(test_dataloader)
+        b3_f1 = total_b3_f1 / len(test_dataloader)
+        ceafe_f1 = total_ceafe_f1 / len(test_dataloader)
+        print('MUC F1: ' + str(muc_f1))
+        print('B3 F1: ' + str(b3_f1))
+        print('CEAFe F1: ' + str(ceafe_f1))
+        avg_f1 = (muc_f1 + b3_f1 + ceafe_f1) / len(metrics)
+        print('AVG F1 SCORE: ' + str(avg_f1))
